@@ -9,9 +9,10 @@ import (
 )
 
 // adds a new node to a given shard //
-func addNode(currentShardMembers []string, currentShard string, r *gin.Engine) {
+func addNode(s *SharedShardInfo) {
 	var d Body // Body struct defined in viewPut.go //
-	r.PUT("/key-value-store-shard/reshard", func(c *gin.Context) {
+	s.Router.PUT("/key-value-store-shard/add-member/:id", func(c *gin.Context) {
+		shardId := c.Param("id")
 		body, err := ioutil.ReadAll(c.Request.Body)
 
 		if err != nil {
@@ -20,7 +21,11 @@ func addNode(currentShardMembers []string, currentShard string, r *gin.Engine) {
 
 		json.Unmarshal(body, &d)
 
-		currentShardMembers = append(currentShardMembers, d.Address)
+		if shardId == "1" {
+			s.ShardOneMembers = append(s.ShardOneMembers, d.Address)
+		} else {
+			s.ShardTwoMembers = append(s.ShardTwoMembers, d.Address)
+		}
 
 		c.JSON(http.StatusOK, gin.H{}) // sends back just the 200 status code with no message body
 	})

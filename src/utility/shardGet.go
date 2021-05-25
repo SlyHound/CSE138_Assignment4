@@ -14,16 +14,27 @@ type numKeys struct {
 	KeyCount int    `json:"shard-id-key-count"`
 }
 
+type SharedShardInfo struct {
+	CurrentShard    string   // the current node's shard
+	ShardOneMembers []string // nodes in shard 1
+	ShardTwoMembers []string // nodes in shard 2
+	Router          *gin.Engine
+}
+
 // gets the number of keys stored in a given shard //
-func GetNumKeys(kvStore map[string]StoreVal, currentShard string, otherShardMembers []string, r *gin.Engine) {
+func GetNumKeys(kvStore map[string]StoreVal, s *SharedShardInfo) {
 	var nk numKeys
-	r.GET("/key-value-store-shard/shard-id-key-count/:id", func(c *gin.Context) {
+	s.Router.GET("/key-value-store-shard/shard-id-key-count/:id", func(c *gin.Context) {
 		shardId := c.Param("id")
 
-		if shardId == currentShard {
+		if shardId == s.CurrentShard {
 			c.JSON(http.StatusOK, gin.H{"message": "Key count of shard ID retrieved successfully", "shard-id-key-count": len(kvStore)})
 		} else { // otherwise request the length of the key value store of the other shard
-			for _, member := range otherShardMembers {
+			members := s.ShardTwoMembers
+			if shardId == "1" {
+				members = s.ShardOneMembers
+			}
+			for _, member := range members {
 				request, err := http.NewRequest("GET", "http://"+member+"/key-value-store-shard/shard-id-key-count/"+shardId, nil)
 
 				if err != nil {
@@ -51,14 +62,14 @@ func GetNumKeys(kvStore map[string]StoreVal, currentShard string, otherShardMemb
 }
 
 // gets the members of a given shard based on the provided ID //
-func GetMembers(currentShardMembers []string, otherShardMembers []string, currentShard string, r *gin.Engine) {
-	r.GET("key-value-store-shard/shard-id-members/:id", func(c *gin.Context) {
+func GetMembers(s *SharedShardInfo) {
+	s.Router.GET("key-value-store-shard/shard-id-members/:id", func(c *gin.Context) {
 		shardId := c.Param("id")
 
-		if shardId == currentShard {
-			c.JSON(http.StatusOK, gin.H{"message": "Members of shard ID retrieved successfully", "shard-id-members": currentShardMembers})
+		if shardId == s.CurrentShard {
+			c.JSON(http.StatusOK, gin.H{"message": "Members of shard ID retrieved successfully", "shard-id-members": s.ShardOneMembers})
 		} else {
-			c.JSON(http.StatusOK, gin.H{"message": "Members of shard ID retrieved successfully", "shard-id-members": otherShardMembers})
+			c.JSON(http.StatusOK, gin.H{"message": "Members of shard ID retrieved successfully", "shard-id-members": s.ShardTwoMembers})
 		}
 	})
 }
