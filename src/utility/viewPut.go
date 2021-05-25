@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type body struct {
+type Body struct {
 	Address string `json:"socket-address"`
 }
 
@@ -20,7 +20,7 @@ func RequestPut(v *View, personalSocketAddr string) {
 
 	Mu.Mutex.Lock()
 	// now broadcast a PUT request to all other replica's to add it to their view's //
-	data, err := json.Marshal(body{Address: v.NewReplica})
+	data, err := json.Marshal(Body{Address: v.NewReplica})
 
 	if err != nil {
 		log.Fatal("There was an error marshalling data.")
