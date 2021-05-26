@@ -22,9 +22,15 @@ func AddNode(s *SharedShardInfo) {
 
 		json.Unmarshal(body, &d)
 
-		sentShardId, _ := strconv.Atoi(shardId)
-		members := GetMembersOfShard(s, sentShardId)
-		members = append(members, d.Address)
+		index := 0
+		for shardIndex := range s.ShardMembers {
+			if shardId == strconv.Itoa(shardIndex+1) { // note: index + 1 since index starts at 0, but we want to start at 1
+				index = shardIndex
+				break
+			}
+		}
+
+		s.ShardMembers[index] = append(s.ShardMembers[index], d.Address)
 
 		c.JSON(http.StatusOK, gin.H{}) // sends back just the 200 status code with no message body
 	})
