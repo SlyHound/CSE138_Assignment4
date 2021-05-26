@@ -20,6 +20,8 @@ type SharedShardInfo struct {
 	ShardMembers    [][]string // contains all members of each shard at each index
 	ShardOneMembers []string   // nodes in shard 1 (move this information into the shardMembers slice of slices)
 	ShardTwoMembers []string   // nodes in shard 2 (move this information into the shardMembers slice of slices)
+	ShardCount      int        // total amount of shards we must have
+	MinNodes        int        // Amount of nodes in each shard (given by the /reshard command, default is 2)
 	Router          *gin.Engine
 }
 

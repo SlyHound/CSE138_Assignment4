@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"src/utility"
+	"strconv"
 	"strings"
 	"time"
 
@@ -130,6 +131,9 @@ func main() {
 
 	socketAddr := os.Getenv("SOCKET_ADDRESS")
 	view := strings.Split(os.Getenv("VIEW"), ",")
+	//TO-DO
+	//Use this to determine total shards for our shared shard var
+	shardCount, _ := strconv.Atoi(os.Getenv("SHARD_COUNT"))
 
 	currVC := []int{0, 0, 0, 0}
 
@@ -137,8 +141,11 @@ func main() {
 	v.PersonalView = append(v.PersonalView, view...)
 	v.NewReplica = ""
 
+	shards := &utility.SharedShardInfo{}
+	shards.ShardCount = shardCount
+	shards.MinNodes = 2 //default value
+
 	go healthCheck(v, socketAddr, kvStore)
-	// go dispatch(v, kvStore, socketAddr)
 
 	router := setupRouter(kvStore, socketAddr, view, currVC)
 	variousResponses(router, kvStore, v)
