@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -15,19 +16,41 @@ type numKeys struct {
 }
 
 type SharedShardInfo struct {
-	CurrentShard    string   // the current node's shard
-	ShardOneMembers []string // nodes in shard 1
-	ShardTwoMembers []string // nodes in shard 2
+	CurrentShard    int        // the current node's shard
+	ShardMembers    [][]string // contains all members of each shard at each index
+	ShardOneMembers []string   // nodes in shard 1 (move this information into the shardMembers slice of slices)
+	ShardTwoMembers []string   // nodes in shard 2 (move this information into the shardMembers slice of slices)
 	Router          *gin.Engine
 }
 
-// gets the number of keys stored in a given shard //
+// gets all the shard ids that currently exist (note: a JSON array of integers is returned)
+func GetAllShardIds(s *SharedShardInfo) {
+	s.Router.GET("/key-value-store-shard/shard-ids", func(c *gin.Context) {
+		shardIds := make([]int, len(s.ShardMembers))
+
+		// adds shard ids to the shardIds slice to then be returned //
+		for index := range s.ShardMembers {
+			shardIds = append(shardIds, index+1)
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "Shard IDs retrieved successfully", "shard-ids": shardIds})
+	})
+}
+
+// gets the current node's shard id (note: the shard id is an integer)
+func GetNodeShardId(s *SharedShardInfo) {
+	s.Router.GET("/key-value-store-shard/node-shard-id", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"message": "Shard ID of the node retrieved successfully", "shard-id": s.CurrentShard})
+	})
+}
+
+// gets the number of keys stored in a given shard
 func GetNumKeys(kvStore map[string]StoreVal, s *SharedShardInfo) {
 	var nk numKeys
 	s.Router.GET("/key-value-store-shard/shard-id-key-count/:id", func(c *gin.Context) {
 		shardId := c.Param("id")
 
-		if shardId == s.CurrentShard {
+		if shardId == strconv.Itoa(s.CurrentShard) {
 			c.JSON(http.StatusOK, gin.H{"message": "Key count of shard ID retrieved successfully", "shard-id-key-count": len(kvStore)})
 		} else { // otherwise request the length of the key value store of the other shard
 			members := s.ShardTwoMembers
@@ -61,12 +84,12 @@ func GetNumKeys(kvStore map[string]StoreVal, s *SharedShardInfo) {
 	})
 }
 
-// gets the members of a given shard based on the provided ID //
+// gets the members of a given shard based on the provided ID
 func GetMembers(s *SharedShardInfo) {
 	s.Router.GET("key-value-store-shard/shard-id-members/:id", func(c *gin.Context) {
 		shardId := c.Param("id")
 
-		if shardId == s.CurrentShard {
+		if shardId == strconv.Itoa(s.CurrentShard) {
 			c.JSON(http.StatusOK, gin.H{"message": "Members of shard ID retrieved successfully", "shard-id-members": s.ShardOneMembers})
 		} else {
 			c.JSON(http.StatusOK, gin.H{"message": "Members of shard ID retrieved successfully", "shard-id-members": s.ShardTwoMembers})
