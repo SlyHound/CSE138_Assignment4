@@ -9,6 +9,14 @@ import (
 // returns shardID where key exists
 func getShardIDofKey(key string) int {
 	// TODO
+	// Proposed approach: 
+	// 1. check current KVstore
+	// 	if value, exists := dict[key]; exists {
+	//    if here, simple serve request
+	// 2. if not, send request to one node in each shard to look for it
+	//    each shard will return either the key or an error
+	// 3. if one returns the key, return that to client
+	//    if all return error, return error 
 }
 
 // returns shardID of current node
