@@ -30,10 +30,13 @@ func ReshardRoute(view *View, personalSocketAddr string, shards *SharedShardInfo
 		defer c.Request.Body.Close()
 
 		//If one shard has <2 members, we have to reshard
-		if len(shards.ShardOneMembers) < 2 {
+		for _, shard := range shards.ShardMembers {
+			if len(shard) < 2 {
+				//reshard
+			}
+		}
+		if len(shards.ShardMembers) < 2 {
 			//reshard to put a server on shard one, if (<shards.MinCount) to reshard from shard two, send an error
-		} else if len(shards.ShardTwoMembers) < 2 {
-			//reshard to put a server on shard two, if (<shards.MinCount) to reshard from shard one, send an error
 		}
 
 		//If we have a new shard count, RESHARD

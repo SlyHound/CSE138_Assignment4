@@ -16,13 +16,25 @@ type numKeys struct {
 }
 
 type SharedShardInfo struct {
-	CurrentShard    int        // the current node's shard
-	ShardMembers    [][]string // contains all members of each shard at each index
-	ShardOneMembers []string   // nodes in shard 1 (move this information into the shardMembers slice of slices)
-	ShardTwoMembers []string   // nodes in shard 2 (move this information into the shardMembers slice of slices)
-	ShardCount      int        // total amount of shards we must have
-	MinNodes        int        // Amount of nodes in each shard (given by the /reshard command, default is 2)
-	Router          *gin.Engine
+	CurrentShard int        // the current node's shard
+	ShardMembers [][]string // contains all members of each shard at each index
+	ShardCount   int        // total amount of shards we must have
+	MinNodes     int        // Amount of nodes in each shard (given by the /reshard command, default is 2)
+	Router       *gin.Engine
+}
+
+// helper function that returns members of a given shardId
+func GetMembersOfShard(s *SharedShardInfo, shardId int) []string {
+	members := s.ShardMembers[0] // default to the first shard
+
+	// find the slice containing the shard members of the particular matching shardId's //
+	for shardIndex := range s.ShardMembers {
+		if shardId == shardIndex+1 { // note: index + 1 since index starts at 0, but we want to start at 1
+			members = s.ShardMembers[shardIndex]
+			break
+		}
+	}
+	return members
 }
 
 // gets all the shard ids that currently exist (note: a JSON array of integers is returned)
@@ -32,7 +44,7 @@ func GetAllShardIds(s *SharedShardInfo) {
 
 		// adds shard ids to the shardIds slice to then be returned //
 		for index := range s.ShardMembers {
-			shardIds = append(shardIds, index+1)
+			shardIds = append(shardIds, index+1) // note: index + 1 since index starts at 0, but we want to start at 1
 		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "Shard IDs retrieved successfully", "shard-ids": shardIds})
@@ -51,14 +63,13 @@ func GetNumKeys(kvStore map[string]StoreVal, s *SharedShardInfo) {
 	var nk numKeys
 	s.Router.GET("/key-value-store-shard/shard-id-key-count/:id", func(c *gin.Context) {
 		shardId := c.Param("id")
+		sentShardId, _ := strconv.Atoi(shardId)
 
-		if shardId == strconv.Itoa(s.CurrentShard) {
+		if sentShardId == s.CurrentShard {
 			c.JSON(http.StatusOK, gin.H{"message": "Key count of shard ID retrieved successfully", "shard-id-key-count": len(kvStore)})
 		} else { // otherwise request the length of the key value store of the other shard
-			members := s.ShardTwoMembers
-			if shardId == "1" {
-				members = s.ShardOneMembers
-			}
+			members := GetMembersOfShard(s, sentShardId)
+
 			for _, member := range members {
 				request, err := http.NewRequest("GET", "http://"+member+"/key-value-store-shard/shard-id-key-count/"+shardId, nil)
 
@@ -91,10 +102,9 @@ func GetMembers(s *SharedShardInfo) {
 	s.Router.GET("key-value-store-shard/shard-id-members/:id", func(c *gin.Context) {
 		shardId := c.Param("id")
 
-		if shardId == strconv.Itoa(s.CurrentShard) {
-			c.JSON(http.StatusOK, gin.H{"message": "Members of shard ID retrieved successfully", "shard-id-members": s.ShardOneMembers})
-		} else {
-			c.JSON(http.StatusOK, gin.H{"message": "Members of shard ID retrieved successfully", "shard-id-members": s.ShardTwoMembers})
-		}
+		sentShardId, _ := strconv.Atoi(shardId)
+		members := GetMembersOfShard(s, sentShardId)
+
+		c.JSON(http.StatusOK, gin.H{"message": "Members of shard ID retrieved successfully", "shard-id-members": members})
 	})
 }
