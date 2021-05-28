@@ -27,7 +27,7 @@ func GetMembersOfShard(s *SharedShardInfo, shardId int) []string {
 
 	// find the slice containing the shard members of the particular matching shardId's //
 	for shardIndex := range s.ShardMembers {
-		if shardId == shardIndex+1 { // note: index + 1 since index starts at 0, but we want to start at 1
+		if shardId == shardIndex {
 			members = s.ShardMembers[shardIndex]
 			break
 		}
@@ -42,7 +42,7 @@ func GetAllShardIds(s *SharedShardInfo) {
 
 		// adds shard ids to the shardIds slice to then be returned //
 		for index := range s.ShardMembers {
-			shardIds = append(shardIds, index+1) // note: index + 1 since index starts at 0, but we want to start at 1
+			shardIds = append(shardIds, index)
 		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "Shard IDs retrieved successfully", "shard-ids": shardIds})
