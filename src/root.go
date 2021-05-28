@@ -127,7 +127,6 @@ func setupRouter(kvStore map[string]utility.StoreVal, socketAddr string, view []
 
 func main() {
 	var kvStore = make(map[string]utility.StoreVal) // key-value store for PUT, GET, & DELETE requests (exported variable)
-	// var reqDispatch = make(map[string]http.Request) // map of addresses and their queued/stored requests to replicate if things go down
 
 	socketAddr := os.Getenv("SOCKET_ADDRESS")
 	view := strings.Split(os.Getenv("VIEW"), ",")
