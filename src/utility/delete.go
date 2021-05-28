@@ -33,7 +33,9 @@ func DeleteRequest(r *gin.Engine, dict map[string]StoreVal, localAddr int, view 
 			m.CausalMetadata = append(m.CausalMetadata, localAddr) //Index of sender address
 			currVC = m.CausalMetadata
 			c.JSON(http.StatusOK, gin.H{"message": "Deleted successfully", "causal-metadata": m.CausalMetadata[0:3]})
+			Mu.Mutex.Lock()
 			delete(dict, key)
+			Mu.Mutex.Unlock()
 		} else {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Key does not exist", "message": "Error in DELETE"})
 		}
@@ -54,23 +56,7 @@ func DeleteRequest(r *gin.Engine, dict map[string]StoreVal, localAddr int, view 
 			fwdRequest.Header = c.Request.Header
 
 			httpForwarder := &http.Client{}
-			fwdResponse, err := httpForwarder.Do(fwdRequest)
-			_ = fwdResponse
-			// Shouldn't worry about Error checking? just send requests out and if things are down oh well?
-			//TODO
-			//USE THIS CATCH TO SEE IF SERVER IS DOWN AND UPDATE IN VIEW @Alex
-			// if err != nil {
-			// 	msg := "Error in " + fwdRequest.Method
-			// 	c.JSON(http.StatusServiceUnavailable, gin.H{"error": view[i] + " is down", "message": msg})
-			// }
-			// if fwdResponse != nil {
-			// 	//TODO
-			// 	//Comment/delete to not chain requests back to client
-			// 	body, _ := ioutil.ReadAll(fwdResponse.Body)
-			// 	rawJSON := json.RawMessage(body)
-			// 	c.JSON(fwdResponse.StatusCode, rawJSON)
-			// 	defer fwdResponse.Body.Close()
-			// }
+			httpForwarder.Do(fwdRequest)
 		}
 	})
 
@@ -91,12 +77,16 @@ func ReplicateDelete(r *gin.Engine, dict map[string]StoreVal, localAddr int, vie
 			if canDeliver(m.CausalMetadata, currVC) {
 				m.CausalMetadata = dict[key].CausalMetadata
 				c.JSON(http.StatusOK, gin.H{"message": "Deleted successfully", "causal-metadata": m.CausalMetadata})
+				Mu.Mutex.Lock()
 				delete(dict, key)
+				Mu.Mutex.Unlock()
 			} else {
 				updateKvStore(view, dict, currVC)
 				m.CausalMetadata = updateVC(m.CausalMetadata, currVC)
 				c.JSON(http.StatusOK, gin.H{"message": "Deleted successfully", "causal-metadata": m.CausalMetadata})
+				Mu.Mutex.Lock()
 				delete(dict, key)
+				Mu.Mutex.Unlock()
 			}
 
 		} else {

@@ -56,8 +56,8 @@ func healthCheck(view *utility.View, personalSocketAddr string, kvStore map[stri
 			// fmt.Println("Before rqstPut call")
 			utility.RequestPut(view, personalSocketAddr)
 			// fmt.Println("Check view in healthCheck after PUT:", view)
+			utility.Mu.Mutex.Lock()
 			if len(kvStore) == 0 { // if the current key-value store is empty, then we need to retrieve k-v pairs from the other replica's
-				utility.Mu.Mutex.Lock()
 				for _, addr := range view.PersonalView {
 					if addr == personalSocketAddr {
 						continue
@@ -72,9 +72,9 @@ func healthCheck(view *utility.View, personalSocketAddr string, kvStore map[stri
 						}
 					}
 				}
-				utility.Mu.Mutex.Unlock()
 				// fmt.Println("Check GET response on values:", dictValues)
 			}
+			utility.Mu.Mutex.Unlock()
 		}
 	}
 }

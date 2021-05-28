@@ -131,13 +131,15 @@ func PutRequest(r *gin.Engine, dict map[string]StoreVal, localAddr int, view []s
 			d.CausalMetadata = append(d.CausalMetadata, localAddr) //Index of sender address
 			currVC = d.CausalMetadata
 
-			Mu.Mutex.Lock()
-			dict[key] = StoreVal{d.Value, d.CausalMetadata}
-			Mu.Mutex.Unlock()
-
 			if _, exists := dict[key]; exists {
+				Mu.Mutex.Lock()
+				dict[key] = StoreVal{d.Value, d.CausalMetadata}
+				Mu.Mutex.Unlock()
 				c.JSON(http.StatusOK, gin.H{"message": "Updated successfully", "replaced": true, "causal-metadata": d.CausalMetadata[0:3]})
 			} else { // otherwise we insert a new key-value pair //
+				Mu.Mutex.Lock()
+				dict[key] = StoreVal{d.Value, d.CausalMetadata}
+				Mu.Mutex.Unlock()
 				c.JSON(http.StatusCreated, gin.H{"message": "Added successfully", "replaced": false, "causal-metadata": d.CausalMetadata[0:3]})
 			}
 		}
@@ -185,27 +187,35 @@ func ReplicatePut(r *gin.Engine, dict map[string]StoreVal, localAddr int, view [
 				if canDeliver(d.CausalMetadata, currVC) {
 					d.CausalMetadata = updateVC(d.CausalMetadata, currVC)
 					currVC = d.CausalMetadata
+					Mu.Mutex.Lock()
 					dict[key] = StoreVal{d.Value, d.CausalMetadata}
+					Mu.Mutex.Unlock()
 					c.JSON(http.StatusOK, gin.H{"message": "Updated successfully", "replaced": true, "causal-metadata": d.CausalMetadata})
 				} else {
 					//get updated kvstore from other replicas
 					updateKvStore(view, dict, currVC)
 					d.CausalMetadata = updateVC(d.CausalMetadata, currVC)
 					currVC = d.CausalMetadata
+					Mu.Mutex.Lock()
 					dict[key] = StoreVal{d.Value, d.CausalMetadata}
+					Mu.Mutex.Unlock()
 					c.JSON(http.StatusOK, gin.H{"message": "Updated successfully", "replaced": true, "causal-metadata": d.CausalMetadata})
 				}
 			} else { // otherwise we insert a new key-value pair //
 				if canDeliver(d.CausalMetadata, currVC) {
 					d.CausalMetadata = updateVC(d.CausalMetadata, currVC)
 					currVC = d.CausalMetadata
+					Mu.Mutex.Lock()
 					dict[key] = StoreVal{d.Value, d.CausalMetadata}
+					Mu.Mutex.Unlock()
 					c.JSON(http.StatusOK, gin.H{"message": "Updated successfully", "replaced": true, "causal-metadata": d.CausalMetadata})
 				} else {
 					updateKvStore(view, dict, currVC)
 					d.CausalMetadata = updateVC(d.CausalMetadata, currVC)
 					currVC = d.CausalMetadata
+					Mu.Mutex.Lock()
 					dict[key] = StoreVal{d.Value, d.CausalMetadata}
+					Mu.Mutex.Unlock()
 					c.JSON(http.StatusOK, gin.H{"message": "Updated successfully", "replaced": true, "causal-metadata": d.CausalMetadata})
 				}
 			}

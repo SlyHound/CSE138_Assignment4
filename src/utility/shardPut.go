@@ -7,9 +7,14 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
+
+type allMembers struct {
+	receivedShardMembers [][]string // member of all shards that is received from the node that is broadcasting
+}
 
 // adds a new node to a given shard
 func AddNode(v *View, s *SharedShardInfo, personalSocketAddr string) {
@@ -46,12 +51,13 @@ func AddNode(v *View, s *SharedShardInfo, personalSocketAddr string) {
 				log.Fatal("error attempting to create a new PUT request:", err.Error())
 			}
 			httpForwarder := &http.Client{} // alias for DefaultClient
-			_, err = httpForwarder.Do(request)
+			response, err := httpForwarder.Do(request)
 
 			// the node could be down when attempting to send to it, so we continue to attempt to send to the other nodes //
 			if err != nil {
 				continue
 			}
+			defer response.Body.Close()
 		}
 
 		c.JSON(http.StatusOK, gin.H{}) // sends back just the 200 status code with no message body
@@ -59,7 +65,8 @@ func AddNode(v *View, s *SharedShardInfo, personalSocketAddr string) {
 }
 
 // helper function that uses the currently received shard members slice of slices
-func newShardMember(s *SharedShardInfo) {
+func NewShardMember(s *SharedShardInfo) {
+	var am allMembers
 	s.Router.PUT("/key-value-store-shard/use-members", func(c *gin.Context) {
 		body, err := ioutil.ReadAll(c.Request.Body) // need to figure out how to parse a slice of slices
 
@@ -67,5 +74,10 @@ func newShardMember(s *SharedShardInfo) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Issue reading bytes from the request body"})
 		}
 
+		strBody := string(body[:])
+		json.NewDecoder(strings.NewReader(strBody)).Decode(&am.receivedShardMembers)
+
+		// set the current shardMembers slice of slices to be that of received shardMembers
+		s.ShardMembers = am.receivedShardMembers
 	})
 }
