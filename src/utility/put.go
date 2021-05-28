@@ -61,10 +61,6 @@ func updateVC(senderVC []int, replicaVC []int) []int {
 	return newVC
 }
 
-//implement way to determine clock is out of date (compareVC)
-//call kvGet() if so, no need to sleep
-//
-
 //compareVC
 //which clock is bigger/max? which can we use?
 //return sum total of vector clock
@@ -94,6 +90,7 @@ func updateKvStore(view []string, dict map[string]StoreVal, currVC []int) {
 	for _, value := range newStoreVal {
 		currVC = compareVC(currVC, value.CausalMetadata)
 	}
+	Mu.Mutex.Lock()
 	//replace our KVStore with the new one if we get a change
 	for key, storeVal := range newStoreVal {
 		_, exists := dict[key]
@@ -101,6 +98,7 @@ func updateKvStore(view []string, dict map[string]StoreVal, currVC []int) {
 			dict[fmt.Sprint(key)] = StoreVal{Value: storeVal.Value, CausalMetadata: storeVal.CausalMetadata}
 		}
 	}
+	Mu.Mutex.Unlock()
 }
 
 //PutRequest for client interaction
@@ -132,23 +130,19 @@ func PutRequest(r *gin.Engine, dict map[string]StoreVal, localAddr int, view []s
 			d.CausalMetadata[localAddr]++
 			d.CausalMetadata = append(d.CausalMetadata, localAddr) //Index of sender address
 			currVC = d.CausalMetadata
-			//replace old value
+
+			Mu.Mutex.Lock()
+			dict[key] = StoreVal{d.Value, d.CausalMetadata}
+			Mu.Mutex.Unlock()
+
 			if _, exists := dict[key]; exists {
-				//Causal CHECK @Jackie
-				dict[key] = StoreVal{d.Value, d.CausalMetadata}
-				//increment here
 				c.JSON(http.StatusOK, gin.H{"message": "Updated successfully", "replaced": true, "causal-metadata": d.CausalMetadata[0:3]})
 			} else { // otherwise we insert a new key-value pair //
-				dict[key] = StoreVal{d.Value, d.CausalMetadata}
-				//increment here
 				c.JSON(http.StatusCreated, gin.H{"message": "Added successfully", "replaced": false, "causal-metadata": d.CausalMetadata[0:3]})
 			}
 		}
 		//send replicas PUT as well
 		for i := 0; i < len(view); i++ {
-			//TODO
-			//refactor to skip vs remove in VC
-			//Causal INCREMENT @Jackie
 			println("Replicating message to: " + "http://" + view[i] + "/key-value-store-r/" + key)
 			c.Request.URL.Host = view[i]
 			c.Request.URL.Scheme = "http"
@@ -163,22 +157,7 @@ func PutRequest(r *gin.Engine, dict map[string]StoreVal, localAddr int, view []s
 			fwdRequest.Header = c.Request.Header
 
 			httpForwarder := &http.Client{Timeout: 5 * time.Second}
-			fwdResponse, err := httpForwarder.Do(fwdRequest)
-			_ = fwdResponse
-
-			// Shouldn't worry about Error checking? just send requests out and if things are down oh well?
-			//TODO
-			//USE THIS CATCH TO SEE IF SERVER IS DOWN AND UPDATE IN VIEW @Alex
-			// if err != nil {
-			// 	msg := "Error in " + fwdRequest.Method
-			// 	c.JSON(http.StatusServiceUnavailable, gin.H{"error": view[i] + " is down", "message": msg})
-			// }
-			// if fwdResponse != nil {
-			// 	body, _ := ioutil.ReadAll(fwdResponse.Body)
-			// 	rawJSON := json.RawMessage(body)
-			// 	c.JSON(fwdResponse.StatusCode, rawJSON)
-			// 	defer fwdResponse.Body.Close()
-			// }
+			httpForwarder.Do(fwdRequest)
 		}
 
 	})
@@ -202,7 +181,6 @@ func ReplicatePut(r *gin.Engine, dict map[string]StoreVal, localAddr int, view [
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Key is too long", "message": "Error in PUT"})
 		} else {
 			// if a key-value pair already exists, then replace the old value //
-			// TO-DO: implement causal consistency and compare causal-metadata here
 			if _, exists := dict[key]; exists {
 				if canDeliver(d.CausalMetadata, currVC) {
 					d.CausalMetadata = updateVC(d.CausalMetadata, currVC)
