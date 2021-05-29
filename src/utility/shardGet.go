@@ -24,6 +24,7 @@ type SharedShardInfo struct {
 
 // helper function that returns members of a given shardId
 func GetMembersOfShard(s *SharedShardInfo, shardId int) []string {
+	Mu.Mutex.Lock()
 	members := s.ShardMembers[0] // default to the first shard
 
 	// find the slice containing the shard members of the particular matching shardId's //
@@ -33,6 +34,7 @@ func GetMembersOfShard(s *SharedShardInfo, shardId int) []string {
 			break
 		}
 	}
+	Mu.Mutex.Unlock()
 	return members
 }
 

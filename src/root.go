@@ -85,6 +85,7 @@ func variousResponses(store map[string]utility.StoreVal, view *utility.View, s *
 	utility.ResponsePut(s.Router, view)
 	utility.KeyValueResponse(s.Router, store)
 	utility.GetAllShardIds(s)
+	utility.GetMembers(s)
 }
 
 func remove(s []string, i int) []string {
