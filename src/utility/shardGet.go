@@ -38,6 +38,24 @@ func GetMembersOfShard(s *SharedShardInfo, shardId int) []string {
 	return members
 }
 
+// helper function that returns the index (shardId) of the current node provided the socker address
+func GetCurrentShardId(s *SharedShardInfo, socketAddr string) int {
+	Mu.Mutex.Lock()
+	shardId := 0
+
+	// loops over the shards and its members in the shard until we know which shard the current node is located in
+	for shardIndex, shardMembers := range s.ShardMembers {
+		for _, shardMember := range shardMembers {
+			if shardMember == socketAddr {
+				shardId = shardIndex
+				break
+			}
+		}
+	}
+	Mu.Mutex.Unlock()
+	return shardId
+}
+
 // gets all the shard ids that currently exist (note: a JSON array of integers is returned)
 func GetAllShardIds(s *SharedShardInfo) {
 	s.Router.GET("/key-value-store-shard/shard-ids", func(c *gin.Context) {
@@ -55,8 +73,12 @@ func GetAllShardIds(s *SharedShardInfo) {
 }
 
 // gets the current node's shard id (note: the shard id is an integer)
-func GetNodeShardId(s *SharedShardInfo) {
+func GetNodeShardId(s *SharedShardInfo, socketAddr string) {
 	s.Router.GET("/key-value-store-shard/node-shard-id", func(c *gin.Context) {
+		tempShard := GetCurrentShardId(s, socketAddr)
+		Mu.Mutex.Lock()
+		s.CurrentShard = tempShard
+		Mu.Mutex.Unlock()
 		c.JSON(http.StatusOK, gin.H{"message": "Shard ID of the node retrieved successfully", "shard-id": s.CurrentShard})
 	})
 }
