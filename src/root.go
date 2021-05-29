@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"src/utility"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,12 +13,11 @@ import (
 )
 
 const (
-	port        = ":8085"
-	numReplicas = 2
+	port = ":8085"
 )
 
 // checks to ensure that replica's are up by broadcasting GET requests //
-func healthCheck(view *utility.View, personalSocketAddr string, kvStore map[string]utility.StoreVal) {
+func healthCheck(view *utility.View, personalSocketAddr string, kvStore map[string]utility.StoreVal, s *utility.SharedShardInfo) {
 
 	// runs infinitely on a 1 second clock interval //
 	interval := time.Tick(time.Second * 1)
@@ -57,8 +57,8 @@ func healthCheck(view *utility.View, personalSocketAddr string, kvStore map[stri
 			utility.RequestPut(view, personalSocketAddr)
 			// fmt.Println("Check view in healthCheck after PUT:", view)
 			utility.Mu.Mutex.Lock()
-			if len(kvStore) == 0 { // if the current key-value store is empty, then we need to retrieve k-v pairs from the other replica's
-				for _, addr := range view.PersonalView {
+			if len(kvStore) == 0 { // if the current key-value store is empty, then we need to retrieve k-v pairs from the other replica's in the current shard
+				for _, addr := range s.ShardMembers[s.CurrentShard] {
 					if addr == personalSocketAddr {
 						continue
 					}
@@ -79,11 +79,12 @@ func healthCheck(view *utility.View, personalSocketAddr string, kvStore map[stri
 	}
 }
 
-func variousResponses(router *gin.Engine, store map[string]utility.StoreVal, view *utility.View) {
-	utility.ResponseGet(router, view)
-	utility.ResponseDelete(router, view)
-	utility.ResponsePut(router, view)
-	utility.KeyValueResponse(router, store)
+func variousResponses(store map[string]utility.StoreVal, view *utility.View, s *utility.SharedShardInfo) {
+	utility.ResponseGet(s.Router, view)
+	utility.ResponseDelete(s.Router, view)
+	utility.ResponsePut(s.Router, view)
+	utility.KeyValueResponse(s.Router, store)
+	utility.GetAllShardIds(s)
 }
 
 func remove(s []string, i int) []string {
@@ -129,6 +130,7 @@ func main() {
 
 	socketAddr := os.Getenv("SOCKET_ADDRESS")
 	view := strings.Split(os.Getenv("VIEW"), ",")
+	shardCount := os.Getenv("SHARD_COUNT")
 
 	currVC := []int{0, 0, 0, 0}
 
@@ -136,10 +138,17 @@ func main() {
 	v.PersonalView = append(v.PersonalView, view...)
 	v.NewReplica = ""
 
-	go healthCheck(v, socketAddr, kvStore)
+	shards := &utility.SharedShardInfo{}
+	intShardCount, _ := strconv.Atoi(shardCount)
+	shards.ShardMembers = make([][]string, intShardCount)
+	shards.CurrentShard = 0 // set it to 0 for now, just for initialization purposes
+	utility.InitialSharding(shards, v, shardCount)
+
+	go healthCheck(v, socketAddr, kvStore, shards)
 
 	router := setupRouter(kvStore, socketAddr, view, currVC)
-	variousResponses(router, kvStore, v)
+	shards.Router = router
+	variousResponses(kvStore, v, shards)
 
 	err := router.Run(port)
 

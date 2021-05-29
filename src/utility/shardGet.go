@@ -2,6 +2,7 @@ package utility
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -38,12 +39,14 @@ func GetMembersOfShard(s *SharedShardInfo, shardId int) []string {
 // gets all the shard ids that currently exist (note: a JSON array of integers is returned)
 func GetAllShardIds(s *SharedShardInfo) {
 	s.Router.GET("/key-value-store-shard/shard-ids", func(c *gin.Context) {
+		Mu.Mutex.Lock()
 		shardIds := make([]int, len(s.ShardMembers))
-
+		fmt.Println("Check s.ShardMembers:", s.ShardMembers)
 		// adds shard ids to the shardIds slice to then be returned //
 		for index := range s.ShardMembers {
-			shardIds = append(shardIds, index)
+			shardIds[index] = index
 		}
+		Mu.Mutex.Unlock()
 
 		c.JSON(http.StatusOK, gin.H{"message": "Shard IDs retrieved successfully", "shard-ids": shardIds})
 	})
