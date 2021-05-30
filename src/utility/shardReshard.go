@@ -5,7 +5,6 @@ import (
 	"hash/fnv"
 	"io/ioutil"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,7 +15,7 @@ type ShardMsg struct {
 }
 
 type shardIdResponse struct {
-	shardId int
+	shardId int `json:shard-id`
 }
 
 func makeRange(min, max int) []int {
@@ -77,31 +76,40 @@ func reshard(view *View, personalSocketAddr string, shards *SharedShardInfo, c *
 	//Basic strategy is brute force
 	//hash IP address, mod N, place in there
 	//first GET preReshard state (store current shard members/view)
+	newShardMembers := [][]string{}
+	var shardResp shardIdResponse
+	//First for loop builds newShardMembers
 	for i := 0; i < len(view.PersonalView); i++ {
+		currReplica := view.PersonalView[i]
 		//for each node, hash IP and then mod amount of shards given by our /reshard call
 		//GET the current shard ID of each node
-		fwdRequest, err := http.NewRequest("GET", "http://"+view.PersonalView[i]+"/key-value-store-shard/node-shard-id", nil)
+		getNodeShardID, err := http.NewRequest("GET", "http://"+currReplica+"/key-value-store-shard/node-shard-id", nil)
 		if err != nil {
-			http.Error(c.Writer, err.Error(), http.StatusInternalServerError)
-			return
+			println("AHH ERROR IN RESHARDING")
 		}
-		fwdRequest.Header = c.Request.Header
 		httpForwarder := &http.Client{Timeout: 5 * time.Second}
-		//Actual send request here
-		fwdResponse, err := httpForwarder.Do(fwdRequest)
-		_ = fwdResponse
+		response, err := httpForwarder.Do(getNodeShardID)
+		if err != nil {
+			println("AHH ERROR IN RESHARDING")
+		}
+		defer response.Body.Close()
+		body, err := ioutil.ReadAll(response.Body)
+		if err != nil {
+			println("AHH ERROR IN RESHARDING")
+		}
+		json.Unmarshal(body, &shardResp)
+		oldShardID := shardResp.shardId
+		newShardID := hash(currReplica) % uint32(shards.ShardCount)
+		if newShardID != uint32(oldShardID) {
+			//call KvGet and replace local KvStore with that of replica in newShardID
+		}
+		newShardMembers[newShardID] = append(newShardMembers[newShardID], currReplica)
 
-		//Find new shard for the node
-		//We determine our server shard the same way we determine where out keys go to, we do hash(key) % numShards
-		//where the key is the IP address in this case
-		newNodeID := int(hash(view.PersonalView[i]) % uint32(shards.ShardCount))
+	}
 
-		//Remove node from old shard, and add to new shard
-		//TODO: do we need to re-send data from the other nodes in shard to replicate to new node? or will that be done automatically?
-		//Do we need to broadcast this request? or just send it once?
-		newShardReq, err := http.NewRequest("PUT", "http://"+view.PersonalView[i]+"/key-value-store-shard/add-member/"+strconv.Itoa(newNodeID), nil)
-		newShardResp, err := httpForwarder.Do(newShardReq)
-		println(newShardResp)
+	//second for loop, broadcasts newShardMembers to every replica in the view
+	for i := 0; i < len(view.PersonalView); i++ {
+
 	}
 
 }
