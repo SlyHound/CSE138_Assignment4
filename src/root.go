@@ -79,14 +79,14 @@ func healthCheck(view *utility.View, personalSocketAddr string, kvStore map[stri
 	}
 }
 
-func variousResponses(store map[string]utility.StoreVal, view *utility.View, s *utility.SharedShardInfo, socketAddr string) {
+func variousResponses(store map[string]utility.StoreVal, view *utility.View, s *utility.SharedShardInfo) {
 	utility.ResponseGet(s.Router, view)
 	utility.ResponseDelete(s.Router, view)
 	utility.ResponsePut(s.Router, view)
 	utility.KeyValueResponse(s.Router, store)
 	utility.GetAllShardIds(s)
 	utility.GetMembers(s)
-	utility.GetNodeShardId(s, socketAddr)
+	utility.GetNodeShardId(s)
 }
 
 func remove(s []string, i int) []string {
@@ -143,14 +143,14 @@ func main() {
 	shards := &utility.SharedShardInfo{}
 	intShardCount, _ := strconv.Atoi(shardCount)
 	shards.ShardMembers = make([][]string, intShardCount)
-	shards.CurrentShard = 0 // set it to 0 for now, just for initialization purposes
+	shards.CurrentShard = utility.GetCurrentShardId(shards, socketAddr)
 	utility.InitialSharding(shards, v, shardCount)
 
 	go healthCheck(v, socketAddr, kvStore, shards)
 
 	router := setupRouter(kvStore, socketAddr, view, currVC)
 	shards.Router = router
-	variousResponses(kvStore, v, shards, socketAddr)
+	variousResponses(kvStore, v, shards)
 
 	err := router.Run(port)
 
