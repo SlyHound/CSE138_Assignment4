@@ -101,6 +101,11 @@ func updateKvStore(view []string, dict map[string]StoreVal, currVC []int) {
 	Mu.Mutex.Unlock()
 }
 
+// TODO : same as GET - 
+// 	determine if key is in this shardID
+// 	if so, serve request
+// 	else, forward request to a node in correct shard
+// 	if key DNE in any, return error
 //PutRequest for client interaction
 func PutRequest(r *gin.Engine, dict map[string]StoreVal, localAddr int, view []string, currVC []int) {
 	var d StoreVal

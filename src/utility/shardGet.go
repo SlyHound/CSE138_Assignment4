@@ -19,6 +19,8 @@ type numKeys struct {
 type SharedShardInfo struct {
 	CurrentShard int        // the current node's shard
 	ShardMembers [][]string // contains all members of each shard at each index
+	ShardCount   int        // total amount of shards we must have
+	MinNodes     int        // Amount of nodes in each shard (given by the /reshard command, default is 2)
 	Router       *gin.Engine
 }
 

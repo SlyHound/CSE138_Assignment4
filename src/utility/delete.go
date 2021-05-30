@@ -14,6 +14,11 @@ type Metadata struct {
 	CausalMetadata []int `json:"causal-metadata"`
 }
 
+// TODO : same as GET -
+//      determine if key is in this shardID
+//      if so, serve request
+//      else, forward request to a node in correct shard
+//      if key DNE in any, return error
 //DeleteRequest Client endpoint for deletions
 func DeleteRequest(r *gin.Engine, dict map[string]StoreVal, localAddr int, view []string, currVC []int) {
 	var m Metadata
