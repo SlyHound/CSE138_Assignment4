@@ -79,14 +79,15 @@ func healthCheck(view *utility.View, personalSocketAddr string, kvStore map[stri
 	}
 }
 
-func variousResponses(store map[string]utility.StoreVal, view *utility.View, s *utility.SharedShardInfo) {
+func variousResponses(store map[string]utility.StoreVal, view *utility.View, s *utility.SharedShardInfo, socketAddr string) {
 	utility.ResponseGet(s.Router, view)
 	utility.ResponseDelete(s.Router, view)
 	utility.ResponsePut(s.Router, view)
 	utility.KeyValueResponse(s.Router, store)
 	utility.GetAllShardIds(s)
 	utility.GetMembers(s)
-	utility.GetNodeShardId(s)
+	utility.GetNodeShardId(s, socketAddr)
+	utility.ShardPutStore(s, store, socketAddr)
 }
 
 func remove(s []string, i int) []string {
@@ -119,8 +120,8 @@ func setupRouter(kvStore map[string]utility.StoreVal, socketAddr string, view []
 	fmt.Printf("%v\n", view)
 
 	// main functionality from assignment 2, basically need to modify the PUTS and DELETES to echo to other
-	utility.PutRequest(router, kvStore, socketIdx, view, currVC)
-	utility.GetRequest(router, kvStore, socketIdx, view)
+	// utility.PutRequest(router, kvStore, socketIdx, view, currVC)
+	// utility.GetRequest(router, kvStore, socketIdx, view)
 	utility.DeleteRequest(router, kvStore, socketIdx, view, currVC)
 	utility.ReplicatePut(router, kvStore, socketIdx, view, currVC)
 	utility.ReplicateDelete(router, kvStore, socketIdx, view, currVC)
@@ -142,15 +143,22 @@ func main() {
 
 	shards := &utility.SharedShardInfo{}
 	intShardCount, _ := strconv.Atoi(shardCount)
+
+	// we must first initialize the properties of the struct, before using it
 	shards.ShardMembers = make([][]string, intShardCount)
-	shards.CurrentShard = utility.GetCurrentShardId(shards, socketAddr)
+	shards.CurrentShard = 0 // init value (not actually used)
+	shards.ShardCount, _ = strconv.Atoi(shardCount)
+	shards.MinNodes = 2 //default value
+
+	router := setupRouter(kvStore, socketAddr, view, currVC)
+	shards.Router = router
+
+	// shards.CurrentShard = utility.GetCurrentShardId(shards, socketAddr)
 	utility.InitialSharding(shards, v, shardCount)
 
 	go healthCheck(v, socketAddr, kvStore, shards)
 
-	router := setupRouter(kvStore, socketAddr, view, currVC)
-	shards.Router = router
-	variousResponses(kvStore, v, shards)
+	variousResponses(kvStore, v, shards, socketAddr)
 
 	err := router.Run(port)
 

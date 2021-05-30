@@ -1,7 +1,6 @@
 package utility
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -18,6 +17,62 @@ const (
 type StoreVal struct {
 	Value          string `json:"value"`
 	CausalMetadata []int  `json:"causal-metadata"`
+}
+
+// puts the current kv pair into the current store if the key-to-shard mapping strategy
+// is the current shard id, otherwise, forward it to one of the nodes with the hashed shard id
+func ShardPutStore(s *SharedShardInfo, store map[string]StoreVal, currReplica string) {
+	s.Router.PUT("/key-value-store/:key", func(c *gin.Context) {
+		key := c.Param("key")
+		body := c.Request.Body
+
+		shardId := Hash(currReplica) % uint32(s.ShardCount)
+
+		// if the newShardId matches that of the current node's shard id, then we can add to the store, & reply back
+		if shardId == uint32(s.CurrentShard) {
+			Mu.Mutex.Lock()
+			if value, exists := store[key]; exists {
+				store[key] = value
+				Mu.Mutex.Unlock()
+				c.JSON(http.StatusOK, gin.H{"message": "Added successfully", "causal-metadata": "<put-casual_metadata here>", "shard-id": s.CurrentShard})
+				Mu.Mutex.Lock()
+			} else {
+				store[key] = value
+				Mu.Mutex.Unlock()
+				c.JSON(http.StatusCreated, gin.H{"message": "Updated successfully", "causal-metadata": "<put-casual_metadata here>", "shard-id": s.CurrentShard})
+				Mu.Mutex.Lock()
+			}
+			Mu.Mutex.Unlock()
+		} else { // otherwise we must create a new request and forward it to one of the members with the given <shard-id>
+			Mu.Mutex.Lock()
+			for index := range s.ShardMembers[shardId] {
+				fwdRequest, err := http.NewRequest("PUT", "http://"+s.ShardMembers[shardId][index]+"/key-value-store/"+key, body)
+
+				if err != nil {
+					Mu.Mutex.Unlock()
+					c.JSON(http.StatusInternalServerError, gin.H{})
+					Mu.Mutex.Lock()
+				}
+
+				Mu.Mutex.Unlock()
+				httpForwarder := &http.Client{Timeout: 5 * time.Second}
+				response, err := httpForwarder.Do(fwdRequest)
+				Mu.Mutex.Lock()
+
+				if err != nil { // if an error occurs, assume the node is dead, so continue attempting to send to another node in the provided shard
+					continue
+				}
+
+				body, _ := ioutil.ReadAll(response.Body)
+				jsonData := json.RawMessage(body)
+				c.JSON(response.StatusCode, jsonData)
+				defer response.Body.Close()
+				break // if we managed to receive a response back after forwarding, don't forward to other nodes in that same shard
+			}
+			Mu.Mutex.Unlock()
+		}
+		// TODO: once the response message is sent back to the client, we must replicate the key-value pair received across all members in the current shard
+	})
 }
 
 func canDeliver(senderVC []int, replicaVC []int) bool {
@@ -101,74 +156,74 @@ func updateKvStore(view []string, dict map[string]StoreVal, currVC []int) {
 	Mu.Mutex.Unlock()
 }
 
-// TODO : same as GET - 
+// TODO : same as GET -
 // 	determine if key is in this shardID
 // 	if so, serve request
 // 	else, forward request to a node in correct shard
 // 	if key DNE in any, return error
 //PutRequest for client interaction
-func PutRequest(r *gin.Engine, dict map[string]StoreVal, localAddr int, view []string, currVC []int) {
-	var d StoreVal
-	//receive request
-	r.PUT("/key-value-store/:key", func(c *gin.Context) {
-		key := c.Param("key")
-		body, _ := ioutil.ReadAll(c.Request.Body)
-		strBody := string(body[:])
-		println("BODY: " + strBody)
-		//hmmmm
-		json.Unmarshal(body, &d)
-		defer c.Request.Body.Close()
-		if strBody == "{}" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Value is missing", "message": "Error in PUT"})
-		} else if len(key) > keyLimit {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Key is too long", "message": "Error in PUT"})
-		} else {
-			//If causal metadata is sent from client, we need to update the KVStore/check if we can deliver
-			//Assume we can't so just update each time
-			//[1,0,0] value:bar
-			if len(d.CausalMetadata) > 0 {
-				updateKvStore(view, dict, currVC)
-			} else if len(d.CausalMetadata) == 0 {
-				d.CausalMetadata = []int{0, 0, 0}
-			}
-			// increment on receive so we send back correct causal clock
-			d.CausalMetadata[localAddr]++
-			d.CausalMetadata = append(d.CausalMetadata, localAddr) //Index of sender address
-			currVC = d.CausalMetadata
+// func PutRequest(r *gin.Engine, dict map[string]StoreVal, localAddr int, view []string, currVC []int) {
+// 	var d StoreVal
+// 	//receive request
+// 	r.PUT("/key-value-store/:key", func(c *gin.Context) {
+// 		key := c.Param("key")
+// 		body, _ := ioutil.ReadAll(c.Request.Body)
+// 		strBody := string(body[:])
+// 		println("BODY: " + strBody)
+// 		//hmmmm
+// 		json.Unmarshal(body, &d)
+// 		defer c.Request.Body.Close()
+// 		if strBody == "{}" {
+// 			c.JSON(http.StatusBadRequest, gin.H{"error": "Value is missing", "message": "Error in PUT"})
+// 		} else if len(key) > keyLimit {
+// 			c.JSON(http.StatusBadRequest, gin.H{"error": "Key is too long", "message": "Error in PUT"})
+// 		} else {
+// 			//If causal metadata is sent from client, we need to update the KVStore/check if we can deliver
+// 			//Assume we can't so just update each time
+// 			//[1,0,0] value:bar
+// 			if len(d.CausalMetadata) > 0 {
+// 				updateKvStore(view, dict, currVC)
+// 			} else if len(d.CausalMetadata) == 0 {
+// 				d.CausalMetadata = []int{0, 0, 0}
+// 			}
+// 			// increment on receive so we send back correct causal clock
+// 			d.CausalMetadata[localAddr]++
+// 			d.CausalMetadata = append(d.CausalMetadata, localAddr) //Index of sender address
+// 			currVC = d.CausalMetadata
 
-			if _, exists := dict[key]; exists {
-				Mu.Mutex.Lock()
-				dict[key] = StoreVal{d.Value, d.CausalMetadata}
-				Mu.Mutex.Unlock()
-				c.JSON(http.StatusOK, gin.H{"message": "Updated successfully", "replaced": true, "causal-metadata": d.CausalMetadata[0:3]})
-			} else { // otherwise we insert a new key-value pair //
-				Mu.Mutex.Lock()
-				dict[key] = StoreVal{d.Value, d.CausalMetadata}
-				Mu.Mutex.Unlock()
-				c.JSON(http.StatusCreated, gin.H{"message": "Added successfully", "replaced": false, "causal-metadata": d.CausalMetadata[0:3]})
-			}
-		}
-		//send replicas PUT as well
-		for i := 0; i < len(view); i++ {
-			println("Replicating message to: " + "http://" + view[i] + "/key-value-store-r/" + key)
-			c.Request.URL.Host = view[i]
-			c.Request.URL.Scheme = "http"
-			data := &StoreVal{Value: d.Value, CausalMetadata: d.CausalMetadata}
-			jsonData, _ := json.Marshal(data)
-			fwdRequest, err := http.NewRequest("PUT", "http://"+view[i]+"/key-value-store-r/"+key, bytes.NewBuffer(jsonData))
-			if err != nil {
-				http.Error(c.Writer, err.Error(), http.StatusInternalServerError)
-				return
-			}
+// 			if _, exists := dict[key]; exists {
+// 				Mu.Mutex.Lock()
+// 				dict[key] = StoreVal{d.Value, d.CausalMetadata}
+// 				Mu.Mutex.Unlock()
+// 				c.JSON(http.StatusOK, gin.H{"message": "Updated successfully", "replaced": true, "causal-metadata": d.CausalMetadata[0:3]})
+// 			} else { // otherwise we insert a new key-value pair //
+// 				Mu.Mutex.Lock()
+// 				dict[key] = StoreVal{d.Value, d.CausalMetadata}
+// 				Mu.Mutex.Unlock()
+// 				c.JSON(http.StatusCreated, gin.H{"message": "Added successfully", "replaced": false, "causal-metadata": d.CausalMetadata[0:3]})
+// 			}
+// 		}
+// 		//send replicas PUT as well
+// 		for i := 0; i < len(view); i++ {
+// 			println("Replicating message to: " + "http://" + view[i] + "/key-value-store-r/" + key)
+// 			c.Request.URL.Host = view[i]
+// 			c.Request.URL.Scheme = "http"
+// 			data := &StoreVal{Value: d.Value, CausalMetadata: d.CausalMetadata}
+// 			jsonData, _ := json.Marshal(data)
+// 			fwdRequest, err := http.NewRequest("PUT", "http://"+view[i]+"/key-value-store-r/"+key, bytes.NewBuffer(jsonData))
+// 			if err != nil {
+// 				http.Error(c.Writer, err.Error(), http.StatusInternalServerError)
+// 				return
+// 			}
 
-			fwdRequest.Header = c.Request.Header
+// 			fwdRequest.Header = c.Request.Header
 
-			httpForwarder := &http.Client{Timeout: 5 * time.Second}
-			httpForwarder.Do(fwdRequest)
-		}
+// 			httpForwarder := &http.Client{Timeout: 5 * time.Second}
+// 			httpForwarder.Do(fwdRequest)
+// 		}
 
-	})
-}
+// 	})
+// }
 
 //ReplicatePut Endpoint for replication
 func ReplicatePut(r *gin.Engine, dict map[string]StoreVal, localAddr int, view []string, currVC []int) {

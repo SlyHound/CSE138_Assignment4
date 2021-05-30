@@ -65,7 +65,7 @@ func ReshardRoute(view *View, personalSocketAddr string, shards *SharedShardInfo
 
 }
 
-func hash(s string) uint32 {
+func Hash(s string) uint32 {
 	h := fnv.New32a()
 	h.Write([]byte(s))
 	return h.Sum32()
@@ -99,7 +99,7 @@ func reshard(view *View, personalSocketAddr string, shards *SharedShardInfo, c *
 		}
 		json.Unmarshal(body, &shardResp)
 		oldShardID := shardResp.shardId
-		newShardID := hash(currReplica) % uint32(shards.ShardCount)
+		newShardID := Hash(currReplica) % uint32(shards.ShardCount)
 		if newShardID != uint32(oldShardID) {
 			//call KvGet and replace local KvStore with that of replica in newShardID
 		}
