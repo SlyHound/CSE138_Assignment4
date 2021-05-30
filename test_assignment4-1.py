@@ -116,7 +116,7 @@ class TestHW4(unittest.TestCase):
     # class/static properties used as shared-state across all tests
     shardIdList = []
     shardsMemberList = []
-    keyCount = 10 # was 600
+    keyCount = 600 # was 600
     causalMetadata = ''
 
     @classmethod

@@ -73,12 +73,8 @@ func GetAllShardIds(s *SharedShardInfo) {
 }
 
 // gets the current node's shard id (note: the shard id is an integer)
-func GetNodeShardId(s *SharedShardInfo, socketAddr string) {
+func GetNodeShardId(s *SharedShardInfo) {
 	s.Router.GET("/key-value-store-shard/node-shard-id", func(c *gin.Context) {
-		tempShard := GetCurrentShardId(s, socketAddr)
-		Mu.Mutex.Lock()
-		s.CurrentShard = tempShard
-		Mu.Mutex.Unlock()
 		c.JSON(http.StatusOK, gin.H{"message": "Shard ID of the node retrieved successfully", "shard-id": s.CurrentShard})
 	})
 }

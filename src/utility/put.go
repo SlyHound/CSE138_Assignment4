@@ -33,14 +33,10 @@ func ShardPutStore(s *SharedShardInfo, store map[string]StoreVal, currReplica st
 			Mu.Mutex.Lock()
 			if value, exists := store[key]; exists {
 				store[key] = value
-				Mu.Mutex.Unlock()
 				c.JSON(http.StatusOK, gin.H{"message": "Added successfully", "causal-metadata": "<put-casual_metadata here>", "shard-id": s.CurrentShard})
-				Mu.Mutex.Lock()
 			} else {
 				store[key] = value
-				Mu.Mutex.Unlock()
 				c.JSON(http.StatusCreated, gin.H{"message": "Updated successfully", "causal-metadata": "<put-casual_metadata here>", "shard-id": s.CurrentShard})
-				Mu.Mutex.Lock()
 			}
 			Mu.Mutex.Unlock()
 		} else { // otherwise we must create a new request and forward it to one of the members with the given <shard-id>
@@ -49,9 +45,7 @@ func ShardPutStore(s *SharedShardInfo, store map[string]StoreVal, currReplica st
 				fwdRequest, err := http.NewRequest("PUT", "http://"+s.ShardMembers[shardId][index]+"/key-value-store/"+key, body)
 
 				if err != nil {
-					Mu.Mutex.Unlock()
 					c.JSON(http.StatusInternalServerError, gin.H{})
-					Mu.Mutex.Lock()
 				}
 
 				Mu.Mutex.Unlock()
@@ -64,9 +58,9 @@ func ShardPutStore(s *SharedShardInfo, store map[string]StoreVal, currReplica st
 				}
 
 				body, _ := ioutil.ReadAll(response.Body)
+				defer response.Body.Close()
 				jsonData := json.RawMessage(body)
 				c.JSON(response.StatusCode, jsonData)
-				defer response.Body.Close()
 				break // if we managed to receive a response back after forwarding, don't forward to other nodes in that same shard
 			}
 			Mu.Mutex.Unlock()

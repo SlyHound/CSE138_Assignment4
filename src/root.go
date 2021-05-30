@@ -86,8 +86,9 @@ func variousResponses(store map[string]utility.StoreVal, view *utility.View, s *
 	utility.KeyValueResponse(s.Router, store)
 	utility.GetAllShardIds(s)
 	utility.GetMembers(s)
-	utility.GetNodeShardId(s, socketAddr)
+	utility.GetNodeShardId(s)
 	utility.ShardPutStore(s, store, socketAddr)
+	utility.GetNumKeys(store, s)
 }
 
 func remove(s []string, i int) []string {
@@ -153,8 +154,8 @@ func main() {
 	router := setupRouter(kvStore, socketAddr, view, currVC)
 	shards.Router = router
 
-	// shards.CurrentShard = utility.GetCurrentShardId(shards, socketAddr)
 	utility.InitialSharding(shards, v, shardCount)
+	shards.CurrentShard = utility.GetCurrentShardId(shards, socketAddr)
 
 	go healthCheck(v, socketAddr, kvStore, shards)
 

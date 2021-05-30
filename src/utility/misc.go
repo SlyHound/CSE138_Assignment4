@@ -6,6 +6,7 @@ import (
 )
 
 // does the initial spliting process of replica's to shards (Note: this does not include any resharding)
+// TEMPORARY SOLUTION
 func InitialSharding(s *SharedShardInfo, view *View, shardCount string) {
 	Mu.Mutex.Lock()
 	count, _ := strconv.Atoi(shardCount)
