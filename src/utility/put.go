@@ -1,6 +1,7 @@
 package utility
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -22,30 +23,52 @@ type StoreVal struct {
 // puts the current kv pair into the current store if the key-to-shard mapping strategy
 // is the current shard id, otherwise, forward it to one of the nodes with the hashed shard id
 func ShardPutStore(s *SharedShardInfo, store map[string]StoreVal, currReplica string) {
+	var d StoreVal
 	s.Router.PUT("/key-value-store/:key", func(c *gin.Context) {
 		key := c.Param("key")
 		body := c.Request.Body
 
+		data, _ := ioutil.ReadAll(body)
+		// strBody := string(data[:])
+		json.Unmarshal(data, &d)
+		defer c.Request.Body.Close()
+
 		shardId := Hash(currReplica) % uint32(s.ShardCount)
+
+		if len(d.CausalMetadata) == 0 {
+			d.CausalMetadata = []int{0, 0, 0, 0}
+		}
+
+		fmt.Printf("***CHECK shardId, s.CurrentShard, d.Val, & d.causalmetadata: %v, %v, (%v, %v)****", shardId, s.CurrentShard, d.Value, d.CausalMetadata)
 
 		// if the newShardId matches that of the current node's shard id, then we can add to the store, & reply back
 		if shardId == uint32(s.CurrentShard) {
-			Mu.Mutex.Lock()
-			if value, exists := store[key]; exists {
-				store[key] = value
+			if _, exists := store[key]; exists {
+				Mu.Mutex.Lock()
+				store[key] = StoreVal{d.Value, d.CausalMetadata}
+				Mu.Mutex.Unlock()
 				c.JSON(http.StatusOK, gin.H{"message": "Added successfully", "causal-metadata": "<put-casual_metadata here>", "shard-id": s.CurrentShard})
 			} else {
-				store[key] = value
+				Mu.Mutex.Lock()
+				store[key] = StoreVal{d.Value, d.CausalMetadata}
+				Mu.Mutex.Unlock()
+				fmt.Printf("******CURRENT STORE: %v**********", store)
 				c.JSON(http.StatusCreated, gin.H{"message": "Updated successfully", "causal-metadata": "<put-casual_metadata here>", "shard-id": s.CurrentShard})
 			}
-			Mu.Mutex.Unlock()
 		} else { // otherwise we must create a new request and forward it to one of the members with the given <shard-id>
 			Mu.Mutex.Lock()
-			for index := range s.ShardMembers[shardId] {
-				fwdRequest, err := http.NewRequest("PUT", "http://"+s.ShardMembers[shardId][index]+"/key-value-store/"+key, body)
+			fmt.Printf("*********s.shardMembers[shardId] IN ELSE: %v******", s.ShardMembers[shardId])
+			for index, member := range s.ShardMembers[shardId] {
+				if member == currReplica {
+					continue
+				}
+
+				fwdRequest, err := http.NewRequest("PUT", "http://"+s.ShardMembers[shardId][index]+"/key-value-store/"+key, bytes.NewBuffer(data))
+				fmt.Printf("********BODY BEING SENT: %v********", string(data[:]))
 
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{})
+					break
 				}
 
 				Mu.Mutex.Unlock()
@@ -66,6 +89,39 @@ func ShardPutStore(s *SharedShardInfo, store map[string]StoreVal, currReplica st
 			Mu.Mutex.Unlock()
 		}
 		// TODO: once the response message is sent back to the client, we must replicate the key-value pair received across all members in the current shard
+		// send nodes in the current shard the key as well
+		Mu.Mutex.Lock()
+		if shardId == uint32(s.CurrentShard) {
+			for _, member := range s.ShardMembers[s.CurrentShard] {
+				if member == currReplica { // don't send a PUT request to self
+					continue
+				}
+				c.Request.URL.Host = member
+				c.Request.URL.Scheme = "http"
+				data := &StoreVal{Value: d.Value, CausalMetadata: d.CausalMetadata}
+				jsonData, _ := json.Marshal(data)
+				fwdRequest, err := http.NewRequest("PUT", "http://"+member+"/key-value-store-r/"+key, bytes.NewBuffer(jsonData))
+				if err != nil {
+					http.Error(c.Writer, err.Error(), http.StatusInternalServerError)
+					return
+				}
+
+				// Mu.Mutex.Unlock()
+				fwdRequest.Header = c.Request.Header
+
+				httpForwarder := &http.Client{Timeout: 5 * time.Second}
+				response, err := httpForwarder.Do(fwdRequest)
+				// Mu.Mutex.Lock()
+
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{})
+					break
+				}
+
+				defer response.Body.Close()
+			}
+		}
+		Mu.Mutex.Unlock()
 	})
 }
 
@@ -126,11 +182,11 @@ func compareVC(leftVC []int, rightVC []int) []int {
 	return rightVC
 }
 
-func updateKvStore(view []string, dict map[string]StoreVal, currVC []int) {
+func updateKvStore(view []string, dict map[string]StoreVal, currVC []int, s *SharedShardInfo) {
 	//get updated kvstore from other replicas
 	newStoreVal := make(map[string]StoreVal)
-	for i := 0; i < len(view); i++ {
-		newStoreVal = KvGet(view[i])
+	for i := 0; i < len(s.ShardMembers[s.CurrentShard]); i++ {
+		newStoreVal = KvGet(s.ShardMembers[s.CurrentShard][i])
 		if len(newStoreVal) > 0 {
 			break
 		}
@@ -220,7 +276,7 @@ func updateKvStore(view []string, dict map[string]StoreVal, currVC []int) {
 // }
 
 //ReplicatePut Endpoint for replication
-func ReplicatePut(r *gin.Engine, dict map[string]StoreVal, localAddr int, view []string, currVC []int) {
+func ReplicatePut(r *gin.Engine, dict map[string]StoreVal, localAddr int, view []string, currVC []int, s *SharedShardInfo) {
 	var d StoreVal
 	r.PUT("/key-value-store-r/:key", func(c *gin.Context) {
 		key := c.Param("key")
@@ -247,7 +303,7 @@ func ReplicatePut(r *gin.Engine, dict map[string]StoreVal, localAddr int, view [
 					c.JSON(http.StatusOK, gin.H{"message": "Updated successfully", "replaced": true, "causal-metadata": d.CausalMetadata})
 				} else {
 					//get updated kvstore from other replicas
-					updateKvStore(view, dict, currVC)
+					updateKvStore(view, dict, currVC, s)
 					d.CausalMetadata = updateVC(d.CausalMetadata, currVC)
 					currVC = d.CausalMetadata
 					Mu.Mutex.Lock()
@@ -264,7 +320,7 @@ func ReplicatePut(r *gin.Engine, dict map[string]StoreVal, localAddr int, view [
 					Mu.Mutex.Unlock()
 					c.JSON(http.StatusOK, gin.H{"message": "Updated successfully", "replaced": true, "causal-metadata": d.CausalMetadata})
 				} else {
-					updateKvStore(view, dict, currVC)
+					updateKvStore(view, dict, currVC, s)
 					d.CausalMetadata = updateVC(d.CausalMetadata, currVC)
 					currVC = d.CausalMetadata
 					Mu.Mutex.Lock()
@@ -274,5 +330,6 @@ func ReplicatePut(r *gin.Engine, dict map[string]StoreVal, localAddr int, view [
 				}
 			}
 		}
+		fmt.Printf("*******AFTER REPLICATION STORE: %v*******", dict)
 	})
 }

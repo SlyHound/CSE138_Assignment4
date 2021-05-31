@@ -20,7 +20,7 @@ type Metadata struct {
 //      else, forward request to a node in correct shard
 //      if key DNE in any, return error
 //DeleteRequest Client endpoint for deletions
-func DeleteRequest(r *gin.Engine, dict map[string]StoreVal, localAddr int, view []string, currVC []int) {
+func DeleteRequest(r *gin.Engine, dict map[string]StoreVal, localAddr int, view []string, currVC []int, s *SharedShardInfo) {
 	var m Metadata
 	println(view)
 	r.DELETE("/key-value-store/:key", func(c *gin.Context) {
@@ -29,7 +29,7 @@ func DeleteRequest(r *gin.Engine, dict map[string]StoreVal, localAddr int, view 
 		// if the key-value pair exists, then delete it //
 		if _, exists := dict[key]; exists {
 			if len(m.CausalMetadata) > 0 {
-				updateKvStore(view, dict, currVC)
+				updateKvStore(view, dict, currVC, s)
 			} else if len(m.CausalMetadata) == 0 {
 				m.CausalMetadata = []int{0, 0, 0}
 			}
@@ -68,7 +68,7 @@ func DeleteRequest(r *gin.Engine, dict map[string]StoreVal, localAddr int, view 
 }
 
 //ReplicateDelete endpoint to replicate delete messages
-func ReplicateDelete(r *gin.Engine, dict map[string]StoreVal, localAddr int, view []string, currVC []int) {
+func ReplicateDelete(r *gin.Engine, dict map[string]StoreVal, localAddr int, view []string, currVC []int, s *SharedShardInfo) {
 	var m Metadata
 	r.DELETE("/key-value-store-r/:key", func(c *gin.Context) {
 		key := c.Param("key")
@@ -86,7 +86,7 @@ func ReplicateDelete(r *gin.Engine, dict map[string]StoreVal, localAddr int, vie
 				delete(dict, key)
 				Mu.Mutex.Unlock()
 			} else {
-				updateKvStore(view, dict, currVC)
+				updateKvStore(view, dict, currVC, s)
 				m.CausalMetadata = updateVC(m.CausalMetadata, currVC)
 				c.JSON(http.StatusOK, gin.H{"message": "Deleted successfully", "causal-metadata": m.CausalMetadata})
 				Mu.Mutex.Lock()

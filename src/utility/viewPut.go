@@ -84,8 +84,8 @@ func ResponsePut(r *gin.Engine, view *View) {
 
 		strBody := string(body[:])
 		// fmt.Println("Check strBody in RespPut:", strBody)
-		json.NewDecoder(strings.NewReader(strBody)).Decode(&d)
 		Mu.Mutex.Lock()
+		json.NewDecoder(strings.NewReader(strBody)).Decode(&d)
 
 		addedAlready := false
 		for index := range view.PersonalView {

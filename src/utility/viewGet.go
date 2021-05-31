@@ -47,10 +47,10 @@ func RequestGet(v *View, personalSocketAddr string) ([]string, map[int]string) {
 			log.Fatal("There was an error creating a GET request with the following error:", err.Error())
 		}
 
-		Mu.Mutex.Unlock()
+		// Mu.Mutex.Unlock()
 		httpForwarder := &http.Client{} // alias for DefaultClient
 		response, err := httpForwarder.Do(request)
-		Mu.Mutex.Lock()
+		// Mu.Mutex.Lock()
 
 		if err != nil { // if a response doesn't come back, then that replica might be down
 			fmt.Println("There was an error sending a GET request to " + v.PersonalView[index])

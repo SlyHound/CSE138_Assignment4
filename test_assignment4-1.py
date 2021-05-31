@@ -194,7 +194,7 @@ class TestHW4(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         shard2Members = responseInJson['shard-id-members']
         self.assertGreater(len(shard2Members), 1)
-
+        print("check shard1Members & shard2Members:", shard1Members, shard2Members)
         self.assertEqual(len(nodeSocketAddressList), len(shard1Members + shard2Members))
 
         self.shardsMemberList += [shard1Members]
@@ -293,39 +293,39 @@ class TestHW4(unittest.TestCase):
     #     print()
 
 
-    # def test_f_shard_key_count(self):
+    def test_f_shard_key_count(self):
 
-    #     print("\n###################### Getting key count of each shard ######################\n")
+        print("\n###################### Getting key count of each shard ######################\n")
 
-    #     shard1 = str(self.shardIdList[0])
-    #     shard2 = str(self.shardIdList[1])
+        shard1 = str(self.shardIdList[0])
+        shard2 = str(self.shardIdList[1])
 
-    #     # get the shard1 key count from node5
-    #     response = requests.get( 'http://localhost:8087/key-value-store-shard/shard-id-key-count/' + shard1, timeout=TIMEOUT)
-    #     responseInJson = response.json()
-    #     self.assertEqual(response.status_code, 200)
-    #     shard1KeyCount = int(responseInJson['shard-id-key-count'])
+        # get the shard1 key count from node5
+        response = requests.get( 'http://localhost:8087/key-value-store-shard/shard-id-key-count/' + shard1, timeout=TIMEOUT)
+        responseInJson = response.json()
+        self.assertEqual(response.status_code, 200)
+        shard1KeyCount = int(responseInJson['shard-id-key-count'])
 
-    #     # get the shard2 key count from node3
-    #     response = requests.get( 'http://localhost:8084/key-value-store-shard/shard-id-key-count/' + shard2, timeout=TIMEOUT)
-    #     responseInJson = response.json()
-    #     self.assertEqual(response.status_code, 200)
-    #     shard2KeyCount = int(responseInJson['shard-id-key-count'])
+        # get the shard2 key count from node3
+        response = requests.get( 'http://localhost:8084/key-value-store-shard/shard-id-key-count/' + shard2, timeout=TIMEOUT)
+        responseInJson = response.json()
+        self.assertEqual(response.status_code, 200)
+        shard2KeyCount = int(responseInJson['shard-id-key-count'])
+        print("Check shard1KeyCount & shard2KeyCount:", shard1KeyCount, shard2KeyCount)
 
-    #     # sum of key counts in shards == total keys
-    #     self.assertEqual(self.keyCount, shard1KeyCount + shard2KeyCount)
+        # sum of key counts in shards == total keys
+        self.assertEqual(self.keyCount, shard1KeyCount + shard2KeyCount)
 
-    #     # check whether keys distributed almost uniformly
-    #     minKeyCount = int ((self.keyCount * 0.75) / shardCount)
-    #     maxKeyCount = int ((self.keyCount * 1.25) / shardCount)
+        # check whether keys distributed almost uniformly
+        minKeyCount = int ((self.keyCount * 0.75) / shardCount)
+        maxKeyCount = int ((self.keyCount * 1.25) / shardCount)
+        # minKeyCount < shard2-key-count < maxKeyCount
+        self.assertGreater(shard1KeyCount, minKeyCount)
+        self.assertLess(shard1KeyCount, maxKeyCount)
 
-    #     # minKeyCount < shard2-key-count < maxKeyCount
-    #     self.assertGreater(shard1KeyCount, minKeyCount)
-    #     self.assertLess(shard1KeyCount, maxKeyCount)
-
-    #     # minKeyCount < shard2-key-count < maxKeyCount
-    #     self.assertGreater(shard2KeyCount, minKeyCount)
-    #     self.assertLess(shard2KeyCount, maxKeyCount)
+        # minKeyCount < shard2-key-count < maxKeyCount
+        self.assertGreater(shard2KeyCount, minKeyCount)
+        self.assertLess(shard2KeyCount, maxKeyCount)
 
 
     # def test_g_add_new_node(self):

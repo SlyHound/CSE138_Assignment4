@@ -43,10 +43,10 @@ func healthCheck(view *utility.View, personalSocketAddr string, kvStore map[stri
 						inReplica = true
 						break
 					}
-					if !inReplica {
-						view.NewReplica = viewSocketAddr
-						break
-					}
+				}
+				if !inReplica {
+					view.NewReplica = viewSocketAddr
+					break
 				}
 			}
 		}
@@ -96,8 +96,9 @@ func remove(s []string, i int) []string {
 	return s[:len(s)-1]
 }
 
-func setupRouter(kvStore map[string]utility.StoreVal, socketAddr string, view []string, currVC []int) *gin.Engine {
+func setupRouter(kvStore map[string]utility.StoreVal, socketAddr string, view []string, currVC []int, shard *utility.SharedShardInfo) *gin.Engine {
 	router := gin.Default()
+	shard.Router = router
 	gin.SetMode(gin.ReleaseMode)
 	// keep global variable of our SOCKET ADDRESS
 	gin.DefaultWriter = ioutil.Discard
@@ -123,9 +124,9 @@ func setupRouter(kvStore map[string]utility.StoreVal, socketAddr string, view []
 	// main functionality from assignment 2, basically need to modify the PUTS and DELETES to echo to other
 	// utility.PutRequest(router, kvStore, socketIdx, view, currVC)
 	// utility.GetRequest(router, kvStore, socketIdx, view)
-	utility.DeleteRequest(router, kvStore, socketIdx, view, currVC)
-	utility.ReplicatePut(router, kvStore, socketIdx, view, currVC)
-	utility.ReplicateDelete(router, kvStore, socketIdx, view, currVC)
+	utility.DeleteRequest(router, kvStore, socketIdx, view, currVC, shard)
+	utility.ReplicatePut(router, kvStore, socketIdx, view, currVC, shard)
+	utility.ReplicateDelete(router, kvStore, socketIdx, view, currVC, shard)
 	return router
 }
 
@@ -150,9 +151,10 @@ func main() {
 	shards.CurrentShard = 0 // init value (not actually used)
 	shards.ShardCount, _ = strconv.Atoi(shardCount)
 	shards.MinNodes = 2 //default value
+	shards.Router = nil // initialized value (not actually used)
 
-	router := setupRouter(kvStore, socketAddr, view, currVC)
-	shards.Router = router
+	router := setupRouter(kvStore, socketAddr, view, currVC, shards)
+	// shards.Router = router
 
 	utility.InitialSharding(shards, v, shardCount)
 	shards.CurrentShard = utility.GetCurrentShardId(shards, socketAddr)
