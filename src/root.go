@@ -79,7 +79,7 @@ func healthCheck(view *utility.View, personalSocketAddr string, kvStore map[stri
 	}
 }
 
-func variousResponses(store map[string]utility.StoreVal, view *utility.View, s *utility.SharedShardInfo, socketAddr string) {
+func variousResponses(store map[string]utility.StoreVal, view *utility.View, s *utility.SharedShardInfo) {
 	utility.ResponseGet(s.Router, view)
 	utility.ResponseDelete(s.Router, view)
 	utility.ResponsePut(s.Router, view)
@@ -87,7 +87,6 @@ func variousResponses(store map[string]utility.StoreVal, view *utility.View, s *
 	utility.GetAllShardIds(s)
 	utility.GetMembers(s)
 	utility.GetNodeShardId(s)
-	utility.ShardPutStore(s, store, socketAddr)
 	utility.GetNumKeys(store, s)
 }
 
@@ -96,7 +95,7 @@ func remove(s []string, i int) []string {
 	return s[:len(s)-1]
 }
 
-func setupRouter(kvStore map[string]utility.StoreVal, socketAddr string, view []string, currVC []int, shard *utility.SharedShardInfo) *gin.Engine {
+func setupRouter(kvStore map[string]utility.StoreVal, view []string, v *utility.View, currVC []int, shard *utility.SharedShardInfo) *gin.Engine {
 	router := gin.Default()
 	shard.Router = router
 	gin.SetMode(gin.ReleaseMode)
@@ -105,13 +104,8 @@ func setupRouter(kvStore map[string]utility.StoreVal, socketAddr string, view []
 	var socketIdx int
 	fmt.Printf("%v\n", view)
 	for i := 0; i < len(view); i++ {
-		println(view[i])
-		if view[i] == socketAddr {
-			// println("VIEW[i]: " + view[i])
-			// println("SOCKETADDR: " + socketAddr)
+		if view[i] == v.SocketAddr {
 			socketIdx = i
-			//set VCIndex to i
-			//funky stuff here, may be unneeded, don't remove for now
 			if i == 0 {
 				view = view[1:]
 			} else {
@@ -119,14 +113,12 @@ func setupRouter(kvStore map[string]utility.StoreVal, socketAddr string, view []
 			}
 		}
 	}
-	fmt.Printf("%v\n", view)
 
-	// main functionality from assignment 2, basically need to modify the PUTS and DELETES to echo to other
-	// utility.PutRequest(router, kvStore, socketIdx, view, currVC)
 	// utility.GetRequest(router, kvStore, socketIdx, view)
-	utility.DeleteRequest(router, kvStore, socketIdx, view, currVC, shard)
-	utility.ReplicatePut(router, kvStore, socketIdx, view, currVC, shard)
-	utility.ReplicateDelete(router, kvStore, socketIdx, view, currVC, shard)
+	utility.ShardPutStore(shard, v, kvStore, socketIdx, currVC)
+	utility.DeleteRequest(router, kvStore, socketIdx, v.PersonalView, currVC, shard)
+	utility.ReplicatePut(router, kvStore, socketIdx, v.PersonalView, currVC, shard)
+	utility.ReplicateDelete(router, kvStore, socketIdx, v.PersonalView, currVC, shard)
 	return router
 }
 
@@ -142,6 +134,7 @@ func main() {
 	v := &utility.View{}
 	v.PersonalView = append(v.PersonalView, view...)
 	v.NewReplica = ""
+	v.SocketAddr = socketAddr
 
 	shards := &utility.SharedShardInfo{}
 	intShardCount, _ := strconv.Atoi(shardCount)
@@ -153,7 +146,7 @@ func main() {
 	shards.MinNodes = 2 //default value
 	shards.Router = nil // initialized value (not actually used)
 
-	router := setupRouter(kvStore, socketAddr, view, currVC, shards)
+	router := setupRouter(kvStore, view, v, currVC, shards)
 	// shards.Router = router
 
 	utility.InitialSharding(shards, v, shardCount)
@@ -161,7 +154,7 @@ func main() {
 
 	go healthCheck(v, socketAddr, kvStore, shards)
 
-	variousResponses(kvStore, v, shards, socketAddr)
+	variousResponses(kvStore, v, shards)
 
 	err := router.Run(port)
 

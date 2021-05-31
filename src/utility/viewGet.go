@@ -22,8 +22,9 @@ type getData struct {
 }
 
 type View struct {
-	PersonalView []string
-	NewReplica   string // pertains only to PUT requests
+	PersonalView []string // contains all nodes that are currently up
+	NewReplica   string   // pertains only to PUT requests
+	SocketAddr   string   // the current node's socket address
 }
 
 /* this function will broadcast a GET request from one replica to all other
