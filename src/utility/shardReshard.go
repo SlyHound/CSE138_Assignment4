@@ -91,6 +91,7 @@ func reshard(view *View, personalSocketAddr string, shards *SharedShardInfo, c *
 	newShardMembers := [][]string{}
 	var shardResp shardIdResponse
 	//First for loop builds newShardMembers
+	//change to be shard loop vs replica by replica
 	for i := 0; i < len(view.PersonalView); i++ {
 		currReplica := view.PersonalView[i]
 		//for each node, hash IP and then mod amount of shards given by our /reshard call
@@ -116,9 +117,10 @@ func reshard(view *View, personalSocketAddr string, shards *SharedShardInfo, c *
 			// go through local KVStore and check for values that still exist with the same hash
 			// otherwise add to chunk to be sent to new shard
 			for key, value := range shards.LocalKVStore {
-				if hashModN(key, uint32(shards.ShardCount)) != newShardID {
+				expectedShardID := hashModN(key, uint32(shards.ShardCount))
+				if expectedShardID != newShardID {
 					//Add to chunk to send to shard
-					chunks[newShardID][key] = value
+					chunks[expectedShardID][key] = value
 					//Delete from local shard
 					delete(shards.LocalKVStore, key)
 				}
