@@ -65,10 +65,18 @@ func ReshardRoute(view *View, personalSocketAddr string, shards *SharedShardInfo
 
 }
 
-func hash(s string) uint32 {
+//Route for chunk replication for new shard data
+func ChunkRoute(view *View, personalSocketAddr string, shards *SharedShardInfo) {
+	shards.Router.PUT("/key-value-store-shard/chunk-r", func(c *gin.Context) {
+		//Add everything sent in request to local storage
+	})
+}
+
+//function to determine what shard we should place k-v pair in
+func hashModN(s string, n uint32) uint32 {
 	h := fnv.New32a()
 	h.Write([]byte(s))
-	return h.Sum32()
+	return h.Sum32() % n
 }
 
 //Actual resharding algorithm
@@ -76,6 +84,10 @@ func reshard(view *View, personalSocketAddr string, shards *SharedShardInfo, c *
 	//Basic strategy is brute force
 	//hash IP address, mod N, place in there
 	//first GET preReshard state (store current shard members/view)
+	// need to redistribute the KVStore evenly as well
+	// First step to redistribute the replicas and the 2nd step is to rehash the data
+	// Create Map of Maps to be our "chunk" to send to the new shards
+	chunks := make(map[uint32]map[string]StoreVal)
 	newShardMembers := [][]string{}
 	var shardResp shardIdResponse
 	//First for loop builds newShardMembers
@@ -98,10 +110,19 @@ func reshard(view *View, personalSocketAddr string, shards *SharedShardInfo, c *
 			println("AHH ERROR IN RESHARDING")
 		}
 		json.Unmarshal(body, &shardResp)
-		oldShardID := shardResp.shardId
-		newShardID := hash(currReplica) % uint32(shards.ShardCount)
-		if newShardID != uint32(oldShardID) {
-			//call KvGet and replace local KvStore with that of replica in newShardID
+		oldShardID := uint32(shardResp.shardId)
+		newShardID := hashModN(currReplica, uint32(shards.ShardCount))
+		if newShardID != oldShardID {
+			// go through local KVStore and check for values that still exist with the same hash
+			// otherwise add to chunk to be sent to new shard
+			for key, value := range shards.LocalKVStore {
+				if hashModN(key, uint32(shards.ShardCount)) != newShardID {
+					//Add to chunk to send to shard
+					chunks[newShardID][key] = value
+					//Delete from local shard
+					delete(shards.LocalKVStore, key)
+				}
+			}
 		}
 		newShardMembers[newShardID] = append(newShardMembers[newShardID], currReplica)
 

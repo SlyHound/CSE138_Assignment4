@@ -16,10 +16,11 @@ type numKeys struct {
 }
 
 type SharedShardInfo struct {
-	CurrentShard int        // the current node's shard
-	ShardMembers [][]string // contains all members of each shard at each index
-	ShardCount   int        // total amount of shards we must have
-	MinNodes     int        // Amount of nodes in each shard (given by the /reshard command, default is 2)
+	CurrentShard int                 // the current node's shard
+	ShardMembers [][]string          // contains all members of each shard at each index
+	ShardCount   int                 // total amount of shards we must have
+	MinNodes     int                 // Amount of nodes in each shard (given by the /reshard command, default is 2)
+	LocalKVStore map[string]StoreVal // Keep reference to KVStore so we can update it if needed
 	Router       *gin.Engine
 }
 
