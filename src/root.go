@@ -57,7 +57,8 @@ func healthCheck(view *utility.View, personalSocketAddr string, kvStore map[stri
 			utility.RequestPut(view, personalSocketAddr)
 			// fmt.Println("Check view in healthCheck after PUT:", view)
 			utility.Mu.Mutex.Lock()
-			if len(kvStore) == 0 { // if the current key-value store is empty, then we need to retrieve k-v pairs from the other replica's in the current shard
+			if len(kvStore) == 0 && len(s.ShardMembers) > 0 { // if the current key-value store is empty, then we need to retrieve k-v pairs from the other replica's in the current shard
+				s.CurrentShard = utility.GetCurrentShardId(s, view.SocketAddr)
 				for _, addr := range s.ShardMembers[s.CurrentShard] {
 					if addr == personalSocketAddr {
 						continue
@@ -89,6 +90,7 @@ func variousResponses(store map[string]utility.StoreVal, view *utility.View, s *
 	utility.GetNodeShardId(s)
 	utility.GetNumKeys(store, s)
 	utility.AddNode(view, s)
+	utility.NewShardMember(s, view)
 }
 
 func remove(s []string, i int) []string {
@@ -146,16 +148,17 @@ func main() {
 
 	// we must first initialize the properties of the struct, before using it
 	shards.ShardMembers = make([][]string, intShardCount)
-	shards.CurrentShard = 0 // init value (not actually used)
+	shards.CurrentShard = 0 // init value
 	shards.ShardCount, _ = strconv.Atoi(shardCount)
 	shards.MinNodes = 2 //default value
 	shards.Router = nil // initialized value (not actually used)
 
 	router := setupRouter(kvStore, view, v, currVC, shards)
-	// shards.Router = router
 
-	utility.InitialSharding(shards, v, shardCount)
-	shards.CurrentShard = utility.GetCurrentShardId(shards, socketAddr)
+	if shardCount != "" {
+		utility.InitialSharding(shards, v, shardCount)
+		shards.CurrentShard = utility.GetCurrentShardId(shards, socketAddr)
+	}
 
 	go healthCheck(v, socketAddr, kvStore, shards)
 

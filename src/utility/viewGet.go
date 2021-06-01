@@ -48,10 +48,10 @@ func RequestGet(v *View, personalSocketAddr string) ([]string, map[int]string) {
 			log.Fatal("There was an error creating a GET request with the following error:", err.Error())
 		}
 
-		// Mu.Mutex.Unlock()
+		Mu.Mutex.Unlock()
 		httpForwarder := &http.Client{} // alias for DefaultClient
 		response, err := httpForwarder.Do(request)
-		// Mu.Mutex.Lock()
+		Mu.Mutex.Lock()
 
 		if err != nil { // if a response doesn't come back, then that replica might be down
 			fmt.Println("There was an error sending a GET request to " + v.PersonalView[index])
@@ -105,7 +105,11 @@ func KvGet(replica string) map[string]StoreVal {
 func ResponseGet(r *gin.Engine, view *View) {
 	r.GET("/key-value-store-view", func(c *gin.Context) {
 		fmt.Println("GET rqst. received")
+		Mu.Mutex.Lock()
+		// copiedView := make([]string, len(view.PersonalView))
+		// copiedView = append(copiedView, view.PersonalView...)
 		c.JSON(http.StatusOK, gin.H{"message": "View retrieved successfully", "view": view.PersonalView})
+		Mu.Mutex.Unlock()
 	})
 }
 

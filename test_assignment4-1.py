@@ -340,9 +340,9 @@ class TestHW4(unittest.TestCase):
         newView =  view + "," + node7SocketAddress
 
         runInstance(node7HostPort, node7Ip, subnetName, "node7", view=newView, giveShardCount=False)
-
+        # os.system("docker ps")
         # change back to 5
-        time.sleep(20) # give time for instance to bind ports, update views, etc..
+        time.sleep(5) # give time for instance to bind ports, update views, etc..
 
         # get the new view from node1
         response = requests.get( 'http://localhost:8082/key-value-store-view', timeout=TIMEOUT)

@@ -129,3 +129,13 @@ func GetMembers(s *SharedShardInfo) {
 		c.JSON(http.StatusOK, gin.H{"message": "Members of shard ID retrieved successfully", "shard-id-members": members})
 	})
 }
+
+// helper function that returns the current node's shard Members
+func GetAllMembers(s *SharedShardInfo) {
+	s.Router.GET("key-value-store-shard/shard-id-all_members/:id", func(c *gin.Context) {
+		shardId := c.Param("id")
+		sentShardId, _ := strconv.Atoi(shardId)
+
+		c.JSON(http.StatusOK, gin.H{"message": "Members of shard ID retrieved successfully", "shard-id-members": s.ShardMembers[sentShardId]})
+	})
+}
