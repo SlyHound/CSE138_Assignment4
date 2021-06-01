@@ -38,11 +38,10 @@ func RequestPut(v *View, personalSocketAddr string) {
 		}
 
 		// fmt.Println("Sending to ", v.PersonalView[index], "with data about v.NewReplica:", v.NewReplica)
-		Mu.Mutex.Unlock()
+
 		request.Header.Set("Content-Type", "application/json")
 		httpForwarder := &http.Client{}
 		response, err := httpForwarder.Do(request)
-		Mu.Mutex.Lock()
 
 		if err != nil { // if a response doesn't come back, then that replica might be down
 			fmt.Println("There was an error sending a PUT request to " + v.PersonalView[index])
@@ -51,6 +50,7 @@ func RequestPut(v *View, personalSocketAddr string) {
 		defer response.Body.Close()
 	}
 
+	// can remove lines 46 - 57 I think, since only the wokem replica sends put requests, so no point in adding to myself //
 	addedAlready := false
 	for index := range v.PersonalView {
 		if v.PersonalView[index] == v.NewReplica {
@@ -82,9 +82,9 @@ func ResponsePut(r *gin.Engine, view *View) {
 		}
 
 		strBody := string(body[:])
-		fmt.Println("Check strBody in RespPut:", strBody)
-		Mu.Mutex.Lock()
+		// fmt.Println("Check strBody in RespPut:", strBody)
 		json.NewDecoder(strings.NewReader(strBody)).Decode(&d)
+		Mu.Mutex.Lock()
 
 		addedAlready := false
 		for index := range view.PersonalView {
@@ -94,7 +94,7 @@ func ResponsePut(r *gin.Engine, view *View) {
 			}
 		}
 
-		fmt.Println("Check d.Address & view.PersonalView in ResponsePut:", d.Address, view.PersonalView)
+		// fmt.Println("Check d.Address & view.PersonalView in ResponsePut:", d.Address, view.PersonalView)
 
 		if !addedAlready {
 			view.PersonalView = append(view.PersonalView, d.Address) // adds the new replica to the view //
