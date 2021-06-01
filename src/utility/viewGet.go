@@ -24,6 +24,7 @@ type getData struct {
 type View struct {
 	PersonalView []string
 	NewReplica   string // pertains only to PUT requests
+	SocketAddr   string
 }
 
 /* this function will broadcast a GET request from one replica to all other

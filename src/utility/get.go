@@ -34,7 +34,7 @@ func ShardGetStore(s *SharedShardInfo, view *View, store map[string]StoreVal, lo
 		json.Unmarshal(data, &d)
 		defer c.Request.Body.Close()
 
-		shardId := Hash(view.SocketAddr) % uint32(s.ShardCount)
+		shardId := hash(view.SocketAddr) % uint32(s.ShardCount)
 
 		if strBody == "{}" {
 			fmt.Printf("********empty body********")

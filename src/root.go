@@ -116,21 +116,12 @@ func setupRouter(kvStore map[string]utility.StoreVal, socketAddr string, view []
 	}
 	fmt.Printf("%v\n", view)
 
-<<<<<<< Updated upstream
-	// main functionality from assignment 2, basically need to modify the PUTS and DELETES to echo to other
-	utility.PutRequest(router, kvStore, socketIdx, view, currVC)
-	utility.GetRequest(router, kvStore, socketIdx, view)
-	utility.DeleteRequest(router, kvStore, socketIdx, view, currVC)
-	utility.ReplicatePut(router, kvStore, socketIdx, view, currVC)
-	utility.ReplicateDelete(router, kvStore, socketIdx, view, currVC)
-=======
 	// utility.GetRequest(router, kvStore, socketIdx, view)
 	utility.ShardPutStore(shard, v, kvStore, socketIdx, currVC)
 	utility.ShardGetStore(shard, v, kvStore, socketIdx, currVC)
 	utility.DeleteRequest(router, kvStore, socketIdx, v.PersonalView, currVC, shard)
 	utility.ReplicatePut(router, kvStore, socketIdx, v.PersonalView, currVC, shard)
 	utility.ReplicateDelete(router, kvStore, socketIdx, v.PersonalView, currVC, shard)
->>>>>>> Stashed changes
 	return router
 }
 
