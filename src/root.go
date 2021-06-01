@@ -88,6 +88,7 @@ func variousResponses(store map[string]utility.StoreVal, view *utility.View, s *
 	utility.GetMembers(s)
 	utility.GetNodeShardId(s)
 	utility.GetNumKeys(store, s)
+	utility.AddNode(view, s)
 }
 
 func remove(s []string, i int) []string {
@@ -129,7 +130,11 @@ func main() {
 	view := strings.Split(os.Getenv("VIEW"), ",")
 	shardCount := os.Getenv("SHARD_COUNT")
 
-	currVC := []int{0, 0, 0, 0}
+	currVC := make([]int, len(view))
+	for range view {
+		currVC = append(currVC, 0)
+	}
+	// currVC := []int{0, 0, 0, 0}
 
 	v := &utility.View{}
 	v.PersonalView = append(v.PersonalView, view...)

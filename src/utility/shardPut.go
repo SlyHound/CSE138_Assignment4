@@ -17,7 +17,7 @@ type allMembers struct {
 }
 
 // adds a new node to a given shard
-func AddNode(v *View, s *SharedShardInfo, personalSocketAddr string) {
+func AddNode(v *View, s *SharedShardInfo) {
 	var d Body // Body struct defined in viewPut.go //
 	s.Router.PUT("/key-value-store-shard/add-member/:id", func(c *gin.Context) {
 		shardId := c.Param("id")
@@ -28,30 +28,37 @@ func AddNode(v *View, s *SharedShardInfo, personalSocketAddr string) {
 		}
 
 		json.Unmarshal(body, &d)
+		intShardId, _ := strconv.Atoi(shardId)
 
 		index := 0
+		Mu.Mutex.Lock()
 		for shardIndex := range s.ShardMembers {
-			if shardId == strconv.Itoa(shardIndex) {
+			if intShardId == shardIndex {
 				index = shardIndex
 				break
 			}
 		}
 
 		s.ShardMembers[index] = append(s.ShardMembers[index], d.Address)
+		Mu.Mutex.Unlock()
 
 		// broadcast to the new shard members slice of slices to all other nodes //
+		Mu.Mutex.Lock()
 		for index := range v.PersonalView {
-			if v.PersonalView[index] == personalSocketAddr {
+			if v.PersonalView[index] == v.SocketAddr {
 				continue
 			}
 			body, _ := json.Marshal(s.ShardMembers)
 			request, err := http.NewRequest("PUT", "http://"+v.PersonalView[index]+"key-value-store-shard/use-members", bytes.NewBuffer(body))
 
 			if err != nil {
+				Mu.Mutex.Unlock()
 				log.Fatal("error attempting to create a new PUT request:", err.Error())
 			}
+			Mu.Mutex.Unlock()
 			httpForwarder := &http.Client{} // alias for DefaultClient
 			response, err := httpForwarder.Do(request)
+			Mu.Mutex.Lock()
 
 			// the node could be down when attempting to send to it, so we continue to attempt to send to the other nodes //
 			if err != nil {
@@ -59,6 +66,7 @@ func AddNode(v *View, s *SharedShardInfo, personalSocketAddr string) {
 			}
 			defer response.Body.Close()
 		}
+		Mu.Mutex.Unlock()
 
 		c.JSON(http.StatusOK, gin.H{}) // sends back just the 200 status code with no message body
 	})
@@ -78,6 +86,8 @@ func NewShardMember(s *SharedShardInfo) {
 		json.NewDecoder(strings.NewReader(strBody)).Decode(&am.receivedShardMembers)
 
 		// set the current shardMembers slice of slices to be that of received shardMembers
+		Mu.Mutex.Lock()
 		s.ShardMembers = am.receivedShardMembers
+		Mu.Mutex.Unlock()
 	})
 }
