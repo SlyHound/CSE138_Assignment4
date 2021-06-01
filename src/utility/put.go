@@ -27,16 +27,13 @@ type fromNode struct {
 	ShardId        int    `json:"shard-id"`
 }
 
-func canDeliver(senderVC []int, replicaVC []int) bool {
+func canDeliver(senderVC []int, replicaVC []int, view []string) bool {
 	// conditions for delivery:
 	//      senderVC[senderslot] = replicaVC[senderslot] + 1
 	//      senderVC[notsender] <= replicaVC[not sender]
-	// r1: [1,0,0]
-	// r2: [0,1,0] "bar"
-	// from r2: [0,1,0]
-	senderID := senderVC[3] // sender position in VC
+	senderID := senderVC[len(view)] // sender position in VC
 
-	for i := 0; i < 3; i++ {
+	for i := 0; i < len(view); i++ {
 		//if sender clock isn't updated by 1 more
 		if i == senderID && senderVC[i] != replicaVC[i]+1 {
 			return false
@@ -58,9 +55,9 @@ func max(x int, y int) int {
 }
 
 // calculate new VC: max(senderVC, replicaVC)
-func updateVC(senderVC []int, replicaVC []int) []int {
-	newVC := make([]int, 4)
-	for i := 0; i < 3; i++ {
+func updateVC(senderVC []int, replicaVC []int, view []string) []int {
+	newVC := make([]int, len(view))
+	for i := 0; i < len(view); i++ {
 		fmt.Printf("SENDERVC: %v\n", senderVC)
 		fmt.Printf("REPLICAVC: %v\n", replicaVC)
 		newVC[i] = max(senderVC[i], replicaVC[i])
@@ -71,10 +68,10 @@ func updateVC(senderVC []int, replicaVC []int) []int {
 //compareVC
 //which clock is bigger/max? which can we use?
 //return sum total of vector clock
-func compareVC(leftVC []int, rightVC []int) []int {
+func compareVC(leftVC []int, rightVC []int, view []string) []int {
 	leftSum := 0
 	rightSum := 0
-	for i := 0; i < 2; i++ {
+	for i := 0; i < len(view); i++ {
 		leftSum += leftVC[i]
 		rightSum += rightVC[i]
 	}
@@ -87,15 +84,17 @@ func compareVC(leftVC []int, rightVC []int) []int {
 func updateKvStore(view []string, dict map[string]StoreVal, currVC []int, s *SharedShardInfo) {
 	//get updated kvstore from other nodes in the current shard
 	newStoreVal := make(map[string]StoreVal)
+	Mu.Mutex.Lock()
 	for i := 0; i < len(s.ShardMembers[s.CurrentShard]); i++ {
 		newStoreVal = KvGet(s.ShardMembers[s.CurrentShard][i])
 		if len(newStoreVal) > 0 {
 			break
 		}
 	}
+	Mu.Mutex.Unlock()
 	//Update local vector clock
 	for _, value := range newStoreVal {
-		currVC = compareVC(currVC, value.CausalMetadata)
+		currVC = compareVC(currVC, value.CausalMetadata, view)
 	}
 	Mu.Mutex.Lock()
 	//replace our KVStore with the new one if we get a change
@@ -136,11 +135,12 @@ func ShardPutStore(s *SharedShardInfo, view *View, store map[string]StoreVal, lo
 			if len(d.CausalMetadata) > 0 {
 				updateKvStore(view.PersonalView, store, currVC, s)
 			} else if len(d.CausalMetadata) == 0 {
+				Mu.Mutex.Lock()
 				d.CausalMetadata = make([]int, len(view.PersonalView))
+				Mu.Mutex.Unlock()
 				for range view.PersonalView {
 					d.CausalMetadata = append(d.CausalMetadata, 0)
 				}
-				// d.CausalMetadata = []int{0, 0, 0}
 			}
 			// increment on receive so we send back correct causal clock
 			d.CausalMetadata[localAddr]++
@@ -218,12 +218,12 @@ func ShardPutStore(s *SharedShardInfo, view *View, store map[string]StoreVal, lo
 					return
 				}
 
-				// Mu.Mutex.Unlock()
+				Mu.Mutex.Unlock()
 				fwdRequest.Header = c.Request.Header
 
 				httpForwarder := &http.Client{Timeout: 5 * time.Second}
 				response, err := httpForwarder.Do(fwdRequest)
-				// Mu.Mutex.Lock()
+				Mu.Mutex.Lock()
 
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{})
@@ -256,8 +256,8 @@ func ReplicatePut(r *gin.Engine, dict map[string]StoreVal, localAddr int, view [
 		} else {
 			// if a key-value pair already exists, then replace the old value //
 			if _, exists := dict[key]; exists {
-				if canDeliver(d.CausalMetadata, currVC) {
-					d.CausalMetadata = updateVC(d.CausalMetadata, currVC)
+				if canDeliver(d.CausalMetadata, currVC, view) {
+					d.CausalMetadata = updateVC(d.CausalMetadata, currVC, view)
 					currVC = d.CausalMetadata
 					Mu.Mutex.Lock()
 					dict[key] = StoreVal{d.Value, d.CausalMetadata}
@@ -266,7 +266,7 @@ func ReplicatePut(r *gin.Engine, dict map[string]StoreVal, localAddr int, view [
 				} else {
 					//get updated kvstore from other replicas
 					updateKvStore(view, dict, currVC, s)
-					d.CausalMetadata = updateVC(d.CausalMetadata, currVC)
+					d.CausalMetadata = updateVC(d.CausalMetadata, currVC, view)
 					currVC = d.CausalMetadata
 					Mu.Mutex.Lock()
 					dict[key] = StoreVal{d.Value, d.CausalMetadata}
@@ -274,8 +274,8 @@ func ReplicatePut(r *gin.Engine, dict map[string]StoreVal, localAddr int, view [
 					c.JSON(http.StatusOK, gin.H{"message": "Updated successfully", "replaced": true, "causal-metadata": d.CausalMetadata})
 				}
 			} else { // otherwise we insert a new key-value pair //
-				if canDeliver(d.CausalMetadata, currVC) {
-					d.CausalMetadata = updateVC(d.CausalMetadata, currVC)
+				if canDeliver(d.CausalMetadata, currVC, view) {
+					d.CausalMetadata = updateVC(d.CausalMetadata, currVC, view)
 					currVC = d.CausalMetadata
 					Mu.Mutex.Lock()
 					dict[key] = StoreVal{d.Value, d.CausalMetadata}
@@ -283,7 +283,7 @@ func ReplicatePut(r *gin.Engine, dict map[string]StoreVal, localAddr int, view [
 					c.JSON(http.StatusOK, gin.H{"message": "Updated successfully", "replaced": true, "causal-metadata": d.CausalMetadata})
 				} else {
 					updateKvStore(view, dict, currVC, s)
-					d.CausalMetadata = updateVC(d.CausalMetadata, currVC)
+					d.CausalMetadata = updateVC(d.CausalMetadata, currVC, view)
 					currVC = d.CausalMetadata
 					Mu.Mutex.Lock()
 					dict[key] = StoreVal{d.Value, d.CausalMetadata}

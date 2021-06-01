@@ -79,7 +79,7 @@ func ReplicateDelete(r *gin.Engine, dict map[string]StoreVal, localAddr int, vie
 		fmt.Printf("CAUSAL CLOCK VALUE: %v\n", m.CausalMetadata)
 		// if the key-value pair exists, then delete it //
 		if _, exists := dict[key]; exists {
-			if canDeliver(m.CausalMetadata, currVC) {
+			if canDeliver(m.CausalMetadata, currVC, view) {
 				m.CausalMetadata = dict[key].CausalMetadata
 				c.JSON(http.StatusOK, gin.H{"message": "Deleted successfully", "causal-metadata": m.CausalMetadata})
 				Mu.Mutex.Lock()
@@ -87,7 +87,7 @@ func ReplicateDelete(r *gin.Engine, dict map[string]StoreVal, localAddr int, vie
 				Mu.Mutex.Unlock()
 			} else {
 				updateKvStore(view, dict, currVC, s)
-				m.CausalMetadata = updateVC(m.CausalMetadata, currVC)
+				m.CausalMetadata = updateVC(m.CausalMetadata, currVC, view)
 				c.JSON(http.StatusOK, gin.H{"message": "Deleted successfully", "causal-metadata": m.CausalMetadata})
 				Mu.Mutex.Lock()
 				delete(dict, key)

@@ -19,6 +19,7 @@ const (
 // checks to ensure that replica's are up by broadcasting GET requests //
 func healthCheck(view *utility.View, personalSocketAddr string, kvStore map[string]utility.StoreVal, s *utility.SharedShardInfo) {
 
+	time.Sleep(2 * time.Second) // sleep to attempt to synchronize startup of all nodes
 	// runs infinitely on a 1 second clock interval //
 	interval := time.Tick(time.Second * 1)
 	for range interval {
@@ -137,7 +138,6 @@ func main() {
 	for range view {
 		currVC = append(currVC, 0)
 	}
-	// currVC := []int{0, 0, 0, 0}
 
 	v := &utility.View{}
 	v.PersonalView = append(v.PersonalView, view...)

@@ -41,7 +41,8 @@ func RequestGet(v *View, personalSocketAddr string) ([]string, map[int]string) {
 		if addr == personalSocketAddr { // skip over the personal replica since we don't send to ourselves
 			continue
 		}
-		// fmt.Println("allSocketAddrs[index], index:", v.PersonalView[index], index)
+		fmt.Println("allSocketAddrs[index], index:", v.PersonalView[index], index)
+		// the line below somehow causes an index out of bounds exception sometimes, but how we're in a lock?
 		request, err := http.NewRequest("GET", "http://"+v.PersonalView[index]+"/key-value-store-view", nil)
 
 		if err != nil {
@@ -52,7 +53,7 @@ func RequestGet(v *View, personalSocketAddr string) ([]string, map[int]string) {
 		httpForwarder := &http.Client{} // alias for DefaultClient
 		response, err := httpForwarder.Do(request)
 		Mu.Mutex.Lock()
-
+		fmt.Println("Check personalView length in viewGet.go: ", len(v.PersonalView))
 		if err != nil { // if a response doesn't come back, then that replica might be down
 			fmt.Println("There was an error sending a GET request to " + v.PersonalView[index])
 			noResponseIndices[index] = v.PersonalView[index]

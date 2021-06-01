@@ -8,7 +8,7 @@ import (
 // does the initial spliting process of replica's to shards (Note: this does not include any resharding)
 // TEMPORARY SOLUTION
 func InitialSharding(s *SharedShardInfo, view *View, shardCount string) {
-	Mu.Mutex.Lock()
+	// Mu.Mutex.Lock()
 	count, _ := strconv.Atoi(shardCount)
 	numNodes := len(view.PersonalView) / count
 	fmt.Println("Check count & numNodes:", count, numNodes)
@@ -20,5 +20,5 @@ func InitialSharding(s *SharedShardInfo, view *View, shardCount string) {
 			s.ShardMembers[index] = append(s.ShardMembers[index], view.PersonalView[numNodes:]...)
 		}
 	}
-	Mu.Mutex.Unlock()
+	// Mu.Mutex.Unlock()
 }
