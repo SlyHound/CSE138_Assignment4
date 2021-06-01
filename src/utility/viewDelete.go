@@ -41,11 +41,10 @@ func RequestDelete(v *View, personalSocketAddr string, indiciesToRemove map[int]
 			if err != nil {
 				log.Fatal("There was an error creating a DELETE request with error:", err.Error())
 			}
-			Mu.Mutex.Unlock()
+
 			request.Header.Set("Content-Type", "application/json")
 			httpForwarder := &http.Client{}
 			response, err := httpForwarder.Do(request)
-			Mu.Mutex.Lock()
 
 			if err != nil { // if a response doesn't come back, then that replica might be down
 				fmt.Println("There was an error sending a DELETE request to " + v.PersonalView[index])

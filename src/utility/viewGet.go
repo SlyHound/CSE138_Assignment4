@@ -22,9 +22,8 @@ type getData struct {
 }
 
 type View struct {
-	PersonalView []string // contains all nodes that are currently up
-	NewReplica   string   // pertains only to PUT requests
-	SocketAddr   string   // the current node's socket address
+	PersonalView []string
+	NewReplica   string // pertains only to PUT requests
 }
 
 /* this function will broadcast a GET request from one replica to all other
@@ -105,11 +104,7 @@ func KvGet(replica string) map[string]StoreVal {
 func ResponseGet(r *gin.Engine, view *View) {
 	r.GET("/key-value-store-view", func(c *gin.Context) {
 		fmt.Println("GET rqst. received")
-		Mu.Mutex.Lock()
-		// copiedView := make([]string, len(view.PersonalView))
-		// copiedView = append(copiedView, view.PersonalView...)
 		c.JSON(http.StatusOK, gin.H{"message": "View retrieved successfully", "view": view.PersonalView})
-		Mu.Mutex.Unlock()
 	})
 }
 
