@@ -271,26 +271,26 @@ class TestHW4(unittest.TestCase):
         print()
         time.sleep(5) # give time for replication to settle down
 
-    # def test_e_get_key_value_operation(self):
+    def test_e_get_key_value_operation(self):
 
-    #     print("\n###################### Getting keys/values from the store ######################\n")
+        print("\n###################### Getting keys/values from the store ######################\n")
 
-    #     nextCausalMetadata = ""
+        nextCausalMetadata = ""
 
-    #     for counter in range(self.keyCount):
+        for counter in range(self.keyCount):
 
-    #         nodeIndex = (counter + 1 ) % len(nodeIpList)
+            nodeIndex = (counter + 1 ) % len(nodeIpList)
 
-    #         # get the value of the key
-    #         response = requests.get('http://localhost:' + nodeHostPortList[nodeIndex] + '/key-value-store/key' + str(counter), json={"causal-metadata": self.causalMetadata}, timeout=TIMEOUT)
-    #         responseInJson = response.json()
-    #         self.assertEqual(response.status_code, 200)
-    #         value = responseInJson["value"]
-    #         self.assertEqual(value, "value" + str(counter))
-    #         self.causalMetadata = responseInJson["causal-metadata"]
+            # get the value of the key
+            response = requests.get('http://localhost:' + nodeHostPortList[nodeIndex] + '/key-value-store/key' + str(counter), json={"causal-metadata": self.causalMetadata}, timeout=TIMEOUT)
+            responseInJson = response.json()
+            self.assertEqual(response.status_code, 200)
+            value = responseInJson["value"]
+            self.assertEqual(value, "value" + str(counter))
+            self.causalMetadata = responseInJson["causal-metadata"]
 
-    #         print('.', end='', flush=True)
-    #     print()
+            print('.', end='', flush=True)
+        print()
 
 
     def test_f_shard_key_count(self):
