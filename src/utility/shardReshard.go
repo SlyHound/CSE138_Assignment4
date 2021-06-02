@@ -35,7 +35,11 @@ func ReshardRoute(view *View, shards *SharedShardInfo) {
 	var ns ShardMsg //newShard request
 	shards.Router.PUT("/key-value-store-shard/reshard", func(c *gin.Context) {
 		body, _ := ioutil.ReadAll(c.Request.Body)
-		json.Unmarshal(body, &ns)
+		err := json.Unmarshal(body, &ns)
+		if err != nil {
+			println("ERROR IN UNMARSHALLING")
+			println(err)
+		}
 		//Check if shard request has something in it, otherwise error
 		defer c.Request.Body.Close()
 		if len(view.PersonalView)/ns.newShardCount < 2 {
@@ -66,7 +70,7 @@ func ChunkRoute(s *SharedShardInfo) {
 }
 
 //Route for updating shard members
-func UpdateShardMembers(s *SharedShardInfo) {
+func UpdateShardMembersRoute(s *SharedShardInfo) {
 	var d newShards
 	s.Router.PUT("/key-value-store-shard/updatesm", func(c *gin.Context) {
 		body, err := ioutil.ReadAll(c.Request.Body)

@@ -92,6 +92,9 @@ func variousResponses(store map[string]utility.StoreVal, view *utility.View, s *
 	utility.GetNumKeys(store, s)
 	utility.AddNode(view, s)
 	utility.NewShardMember(s, view)
+	utility.ReshardRoute(view, s)
+	utility.UpdateShardMembersRoute(s)
+	utility.ChunkRoute(s)
 }
 
 func remove(s []string, i int) []string {
