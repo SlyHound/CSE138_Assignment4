@@ -19,7 +19,7 @@ type getNode struct {
 }
 
 func ShardGetStore(s *SharedShardInfo, view *View, store map[string]StoreVal, localAddr int, currVC []int) {
-
+	fmt.Printf("******** opening get ********")
 	var (
 		d  StoreVal
 		gn getNode
