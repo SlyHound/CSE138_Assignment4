@@ -14,8 +14,13 @@ type Metadata struct {
 	CausalMetadata []int `json:"causal-metadata"`
 }
 
+// TODO : same as GET -
+//      determine if key is in this shardID
+//      if so, serve request
+//      else, forward request to a node in correct shard
+//      if key DNE in any, return error
 //DeleteRequest Client endpoint for deletions
-func DeleteRequest(r *gin.Engine, dict map[string]StoreVal, localAddr int, view []string, currVC []int) {
+func DeleteRequest(r *gin.Engine, dict map[string]StoreVal, localAddr int, view []string, currVC []int, s *SharedShardInfo) {
 	var m Metadata
 	println(view)
 	r.DELETE("/key-value-store/:key", func(c *gin.Context) {
@@ -24,7 +29,7 @@ func DeleteRequest(r *gin.Engine, dict map[string]StoreVal, localAddr int, view 
 		// if the key-value pair exists, then delete it //
 		if _, exists := dict[key]; exists {
 			if len(m.CausalMetadata) > 0 {
-				updateKvStore(view, dict, currVC)
+				updateKvStore(view, dict, currVC, s)
 			} else if len(m.CausalMetadata) == 0 {
 				m.CausalMetadata = []int{0, 0, 0}
 			}
@@ -33,7 +38,9 @@ func DeleteRequest(r *gin.Engine, dict map[string]StoreVal, localAddr int, view 
 			m.CausalMetadata = append(m.CausalMetadata, localAddr) //Index of sender address
 			currVC = m.CausalMetadata
 			c.JSON(http.StatusOK, gin.H{"message": "Deleted successfully", "causal-metadata": m.CausalMetadata[0:3]})
+			Mu.Mutex.Lock()
 			delete(dict, key)
+			Mu.Mutex.Unlock()
 		} else {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Key does not exist", "message": "Error in DELETE"})
 		}
@@ -54,30 +61,14 @@ func DeleteRequest(r *gin.Engine, dict map[string]StoreVal, localAddr int, view 
 			fwdRequest.Header = c.Request.Header
 
 			httpForwarder := &http.Client{}
-			fwdResponse, err := httpForwarder.Do(fwdRequest)
-			_ = fwdResponse
-			// Shouldn't worry about Error checking? just send requests out and if things are down oh well?
-			//TODO
-			//USE THIS CATCH TO SEE IF SERVER IS DOWN AND UPDATE IN VIEW @Alex
-			// if err != nil {
-			// 	msg := "Error in " + fwdRequest.Method
-			// 	c.JSON(http.StatusServiceUnavailable, gin.H{"error": view[i] + " is down", "message": msg})
-			// }
-			// if fwdResponse != nil {
-			// 	//TODO
-			// 	//Comment/delete to not chain requests back to client
-			// 	body, _ := ioutil.ReadAll(fwdResponse.Body)
-			// 	rawJSON := json.RawMessage(body)
-			// 	c.JSON(fwdResponse.StatusCode, rawJSON)
-			// 	defer fwdResponse.Body.Close()
-			// }
+			httpForwarder.Do(fwdRequest)
 		}
 	})
 
 }
 
 //ReplicateDelete endpoint to replicate delete messages
-func ReplicateDelete(r *gin.Engine, dict map[string]StoreVal, localAddr int, view []string, currVC []int) {
+func ReplicateDelete(r *gin.Engine, dict map[string]StoreVal, localAddr int, view []string, currVC []int, s *SharedShardInfo) {
 	var m Metadata
 	r.DELETE("/key-value-store-r/:key", func(c *gin.Context) {
 		key := c.Param("key")
@@ -88,15 +79,19 @@ func ReplicateDelete(r *gin.Engine, dict map[string]StoreVal, localAddr int, vie
 		fmt.Printf("CAUSAL CLOCK VALUE: %v\n", m.CausalMetadata)
 		// if the key-value pair exists, then delete it //
 		if _, exists := dict[key]; exists {
-			if canDeliver(m.CausalMetadata, currVC) {
+			if canDeliver(m.CausalMetadata, currVC, view) {
 				m.CausalMetadata = dict[key].CausalMetadata
 				c.JSON(http.StatusOK, gin.H{"message": "Deleted successfully", "causal-metadata": m.CausalMetadata})
+				Mu.Mutex.Lock()
 				delete(dict, key)
+				Mu.Mutex.Unlock()
 			} else {
-				updateKvStore(view, dict, currVC)
-				m.CausalMetadata = updateVC(m.CausalMetadata, currVC)
+				updateKvStore(view, dict, currVC, s)
+				m.CausalMetadata = updateVC(m.CausalMetadata, currVC, view)
 				c.JSON(http.StatusOK, gin.H{"message": "Deleted successfully", "causal-metadata": m.CausalMetadata})
+				Mu.Mutex.Lock()
 				delete(dict, key)
+				Mu.Mutex.Unlock()
 			}
 
 		} else {

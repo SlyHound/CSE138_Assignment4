@@ -83,7 +83,7 @@ func UpdateShardMembers(s *SharedShardInfo) {
 }
 
 //function to determine what shard we should place k-v pair in
-func hashModN(s string, n int) int {
+func HashModN(s string, n int) int {
 	h := fnv.New32a()
 	h.Write([]byte(s))
 	return int(h.Sum32() % uint32(n))
@@ -140,7 +140,7 @@ func reshard(view *View, shards *SharedShardInfo, c *gin.Context) {
 		shardKV := KvGet(shards.ShardMembers[currentShard][0])
 		oldShardID := currentShard
 		for key, value := range shardKV {
-			newShardID := hashModN(key, shards.ShardCount)
+			newShardID := HashModN(key, shards.ShardCount)
 			chunks[newShardID][key] = value
 			if newShardID != oldShardID {
 				//Delete from the original shardKV
