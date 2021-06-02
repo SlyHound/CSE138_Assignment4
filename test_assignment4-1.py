@@ -282,7 +282,6 @@ class TestHW4(unittest.TestCase):
             nodeIndex = (counter + 1 ) % len(nodeIpList)
 
             # get the value of the key
-            print(nodeHostPortList[nodeIndex])
             response = requests.get('http://localhost:' + nodeHostPortList[nodeIndex] + '/key-value-store/key' + str(counter), json={"causal-metadata": self.causalMetadata}, timeout=TIMEOUT)
             responseInJson = response.json()
             self.assertEqual(response.status_code, 200)

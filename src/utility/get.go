@@ -44,20 +44,20 @@ func ShardGetStore(s *SharedShardInfo, view *View, store map[string]StoreVal, lo
 		} else {
 			fmt.Printf("********no error********")
 			// if the newShardId matches that of the current node's shard id, then key should be in this shard (if it exists)
-			if shardId == uint32(s.CurrentShard) {	
+			if shardId == uint32(s.CurrentShard)  {	
 				fmt.Printf("********this replica serves request********")
-				// if it exists, return
-				if value, exists := store[key]; exists {
-					c.JSON(http.StatusOK, gin.H{"doesExist": true, "message": "Retrieved successfully", "value": value.Value, "causal-metadata": value.CausalMetadata})
-				} else {	// key should be in this shard, so it must not exist
-					c.JSON(http.StatusNotFound, gin.H{"doesExist": false, "error": "Key does not exist", "message": "Error in GET"})
-				}
-			} else {
+			}
+
 				fmt.Printf("********forward case ********")
 				// have to forward request to the first available replica in the correct shard
 				for index, member := range s.ShardMembers[shardId] {
 					if member == view.SocketAddr {
-						continue
+						if value, exists := store[key]; exists {
+							c.JSON(http.StatusOK, gin.H{"doesExist": true, "message": "Retrieved successfully", "value": value.Value, "causal-metadata": value.CausalMetadata})
+							break
+						} else {
+							continue
+						}
 					}
 
 					data := &StoreVal{Value: d.Value, CausalMetadata: d.CausalMetadata}
@@ -87,7 +87,7 @@ func ShardGetStore(s *SharedShardInfo, view *View, store map[string]StoreVal, lo
 					c.JSON(response.StatusCode, gin.H{"message": gn.Message, "causal-metadata": gn.CausalMetadata, "value": gn.Value})
 					break // if we managed to receive a response back after forwarding, don't forward to other nodes in that same shard
 				}
-			}
+			//}
 		}	
 	})
 }
