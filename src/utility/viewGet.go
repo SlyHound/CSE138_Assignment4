@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -50,11 +51,24 @@ func RequestGet(v *View, personalSocketAddr string) ([]string, map[int]string) {
 		}
 
 		Mu.Mutex.Unlock()
-		httpForwarder := &http.Client{} // alias for DefaultClient
+		httpForwarder := &http.Client{Timeout: 3 * time.Second} // alias for DefaultClient
 		response, err := httpForwarder.Do(request)
 		Mu.Mutex.Lock()
+
+		// try to send a GET request 5 more times //
+		for i := 0; i < 5; i++ {
+			if err == nil {
+				break
+			}
+			fmt.Println("ATTEMPTING TO SEND 5 MORE TIMES & check err: ", err.Error())
+			Mu.Mutex.Unlock()
+			httpForwarder := &http.Client{Timeout: 1 * time.Second} // alias for DefaultClient
+			response, err = httpForwarder.Do(request)
+			Mu.Mutex.Lock()
+		}
+
 		fmt.Println("Check personalView length in viewGet.go: ", len(v.PersonalView))
-		if err != nil { // if a response doesn't come back, then that replica might be down
+		if err != nil { // if a response doesn't come back, then that replica might be down, so try again 2 more times
 			fmt.Println("There was an error sending a GET request to " + v.PersonalView[index])
 			noResponseIndices[index] = v.PersonalView[index]
 			continue

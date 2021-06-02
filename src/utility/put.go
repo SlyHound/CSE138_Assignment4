@@ -137,10 +137,10 @@ func ShardPutStore(s *SharedShardInfo, view *View, store map[string]StoreVal, lo
 			} else if len(d.CausalMetadata) == 0 {
 				Mu.Mutex.Lock()
 				d.CausalMetadata = make([]int, len(view.PersonalView))
-				Mu.Mutex.Unlock()
-				for range view.PersonalView {
-					d.CausalMetadata = append(d.CausalMetadata, 0)
+				for index := range view.PersonalView {
+					d.CausalMetadata[index] = 0
 				}
+				Mu.Mutex.Unlock()
 			}
 			// increment on receive so we send back correct causal clock
 			d.CausalMetadata[localAddr]++

@@ -135,8 +135,8 @@ func main() {
 	shardCount := os.Getenv("SHARD_COUNT")
 
 	currVC := make([]int, len(view))
-	for range view {
-		currVC = append(currVC, 0)
+	for index := range view {
+		currVC[index] = 0
 	}
 
 	v := &utility.View{}
