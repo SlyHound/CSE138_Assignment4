@@ -131,7 +131,6 @@ func NewShardMember(s *SharedShardInfo, view *View) {
 		Mu.Mutex.Lock()
 		if len(s.ShardMembers) == 0 {
 			s.ShardMembers = make([][]string, len(am.receivedShardMembers))
-			// s.CurrentShard = GetCurrentShardId(s, view.SocketAddr)
 		}
 		for shardIndex, shardMembers := range am.receivedShardMembers {
 			s.ShardMembers[shardIndex] = append(s.ShardMembers[shardIndex], shardMembers...)
