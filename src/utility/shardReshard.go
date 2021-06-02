@@ -1,6 +1,7 @@
 package utility
 
 import (
+	"bytes"
 	"encoding/json"
 	"hash/fnv"
 	"io/ioutil"
@@ -161,7 +162,7 @@ func reshard(view *View, shards *SharedShardInfo, c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error in resharding process"})
 	}
 	for i := 0; i < len(view.PersonalView); i++ {
-		req, err := http.NewRequest(http.MethodPut, "http://"+view.PersonalView[i]+"/key-value-store-shard/updatesm", bytes.newBuffer(usJSON))
+		req, err := http.NewRequest(http.MethodPut, "http://"+view.PersonalView[i]+"/key-value-store-shard/updatesm", bytes.NewBuffer(usJSON))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error in resharding process"})
 		} else {
@@ -180,7 +181,7 @@ func reshard(view *View, shards *SharedShardInfo, c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error in resharding process"})
 		}
 		for _, rep := range row {
-			req, err := http.NewRequest(http.MethodPut, "http://"+rep+"/key-value-store-shard/chunk-r", bytes.newBuffer(kvJSON))
+			req, err := http.NewRequest(http.MethodPut, "http://"+rep+"/key-value-store-shard/chunk-r", bytes.NewBuffer(kvJSON))
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error in resharding process"})
 			} else {
@@ -191,4 +192,6 @@ func reshard(view *View, shards *SharedShardInfo, c *gin.Context) {
 	}
 
 	//if successful and nothing has failed
+
+	c.JSON(http.StatusOK, gin.H{"message": "Resharding done successfully"})
 }
