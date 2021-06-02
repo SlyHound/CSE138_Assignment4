@@ -30,50 +30,24 @@ func makeRange(min, max int) []int {
 }
 
 //Route to determine resharding request parameters
-func ReshardRoute(view *View, personalSocketAddr string, shards *SharedShardInfo) {
+func ReshardRoute(view *View, shards *SharedShardInfo) {
 	var ns ShardMsg //newShard request
 	shards.Router.PUT("/key-value-store-shard/reshard", func(c *gin.Context) {
-		startViewSize := len(view.PersonalView) //current length of view to see if new server is added
 		body, _ := ioutil.ReadAll(c.Request.Body)
 		json.Unmarshal(body, &ns)
 		//Check if shard request has something in it, otherwise error
 		defer c.Request.Body.Close()
-
-		//If one shard has <2 members, we have to reshard
-		for _, shard := range shards.ShardMembers {
-			if len(shard) < 2 {
-				//reshard
-			}
-		}
-		if len(shards.ShardMembers) < 2 {
-			//reshard to put a server on shard one, if (<shards.MinCount) to reshard from shard two, send an error
-		}
-
-		if len(view.PersonalView)/shards.ShardCount < 2 {
-
-		}
-
-		//If we have a new shard count, RESHARD
-		if ns.newShardCount != shards.ShardCount {
-			// Make sure we can have len(view.personalView)/ns.newShardCount >= 2
-			// Otherwise return error
-		}
-
-		//If we have a new server added/dropped to the view, then we have to rebalance/redistribute
-		newViewSize := len(view.PersonalView)
-		if newViewSize < startViewSize {
-			//reshard and rebalance the servers, send the server to the shard with the least amt of servers,
-			//and in case of a tie, send to the first shard in our shard list
-		} else if newViewSize > startViewSize {
-			//if the removal reduced count < 2, then we'd already know from our case above
-			//Otherwise, check the key discrepancy here, if the shard that just lost a server
+		if len(view.PersonalView)/ns.newShardCount < 2 {
+			c.JSON(http.StatusBadRequest, gin.H{"message": "Not enough nodes to provide fault-tolerance with the given shard count!"})
+		} else {
+			reshard(view, shards, c)
 		}
 	})
 
 }
 
 //Route for chunk replication for new shard data
-func ChunkRoute(view *View, personalSocketAddr string, s *SharedShardInfo) {
+func ChunkRoute(s *SharedShardInfo) {
 	var b chunkBody
 	s.Router.PUT("/key-value-store-shard/chunk-r", func(c *gin.Context) {
 		//Add everything sent in request to local storage
@@ -116,7 +90,7 @@ func hashModN(s string, n int) int {
 
 //Actual resharding algorithm
 //LOCK THIS WHOLE FUNCTION
-func reshard(view *View, personalSocketAddr string, shards *SharedShardInfo, c *gin.Context) {
+func reshard(view *View, shards *SharedShardInfo, c *gin.Context) {
 	//Basic strategy is brute force
 	//hash IP address, mod N, place in there
 	//first GET preReshard state (store current shard members/view)
@@ -184,12 +158,12 @@ func reshard(view *View, personalSocketAddr string, shards *SharedShardInfo, c *
 	client := &http.Client{}
 	usJSON, err := json.Marshal(updatedShards)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error in resharding process"})
 	}
 	for i := 0; i < len(view.PersonalView); i++ {
 		req, err := http.NewRequest(http.MethodPut, "http://"+view.PersonalView[i]+"/key-value-store-shard/updatesm", bytes.newBuffer(usJSON))
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error in resharding process"})
 		} else {
 			req.Header.Set("Content-Type", "application/json; charset=utf-8")
 			client.Do(req)
@@ -203,16 +177,18 @@ func reshard(view *View, personalSocketAddr string, shards *SharedShardInfo, c *
 		}
 		kvJSON, err := json.Marshal(chunksToSend)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error in resharding process"})
 		}
 		for _, rep := range row {
 			req, err := http.NewRequest(http.MethodPut, "http://"+rep+"/key-value-store-shard/chunk-r", bytes.newBuffer(kvJSON))
 			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{})
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error in resharding process"})
 			} else {
 				req.Header.Set("Content-Type", "application/json; charset=utf-8")
 				client.Do(req)
 			}
 		}
 	}
+
+	//if successful and nothing has failed
 }
