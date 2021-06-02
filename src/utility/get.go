@@ -1,14 +1,14 @@
 package utility
 
 import (
-	"net/http"
-	"github.com/gin-gonic/gin"
-
-	"io/ioutil"
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"bytes"
+	"io/ioutil"
+	"net/http"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 // struct designed for decoding JSON data received from a node in a different shard

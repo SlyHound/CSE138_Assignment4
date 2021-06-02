@@ -2,6 +2,7 @@ package utility
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -25,27 +26,47 @@ type SharedShardInfo struct {
 
 // helper function that returns members of a given shardId
 func GetMembersOfShard(s *SharedShardInfo, shardId int) []string {
+	Mu.Mutex.Lock()
 	members := s.ShardMembers[0] // default to the first shard
 
 	// find the slice containing the shard members of the particular matching shardId's //
 	for shardIndex := range s.ShardMembers {
-		if shardId == shardIndex+1 { // note: index + 1 since index starts at 0, but we want to start at 1
+		if shardId == shardIndex {
 			members = s.ShardMembers[shardIndex]
 			break
 		}
 	}
+	Mu.Mutex.Unlock()
 	return members
+}
+
+// helper function that returns the index (shardId) of the current node provided the socker address
+func GetCurrentShardId(s *SharedShardInfo, socketAddr string) int {
+	shardId := 0
+
+	// loops over the shards and its members in the shard until we know which shard the current node is located in
+	for shardIndex, shardMembers := range s.ShardMembers {
+		for _, shardMember := range shardMembers {
+			if shardMember == socketAddr {
+				shardId = shardIndex
+				break
+			}
+		}
+	}
+	return shardId
 }
 
 // gets all the shard ids that currently exist (note: a JSON array of integers is returned)
 func GetAllShardIds(s *SharedShardInfo) {
 	s.Router.GET("/key-value-store-shard/shard-ids", func(c *gin.Context) {
+		Mu.Mutex.Lock()
 		shardIds := make([]int, len(s.ShardMembers))
-
+		fmt.Println("Check s.ShardMembers:", s.ShardMembers)
 		// adds shard ids to the shardIds slice to then be returned //
 		for index := range s.ShardMembers {
-			shardIds = append(shardIds, index+1) // note: index + 1 since index starts at 0, but we want to start at 1
+			shardIds[index] = index
 		}
+		Mu.Mutex.Unlock()
 
 		c.JSON(http.StatusOK, gin.H{"message": "Shard IDs retrieved successfully", "shard-ids": shardIds})
 	})
