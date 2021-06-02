@@ -5,7 +5,7 @@ import (
 	"hash/fnv"
 	"io/ioutil"
 	"net/http"
-	"time"
+	"sort"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,8 +14,11 @@ type ShardMsg struct {
 	newShardCount int `json:shard-count`
 }
 
-type shardIdResponse struct {
-	shardId int `json:shard-id`
+type chunkBody struct {
+	chunkInfo map[string]StoreVal `json:chunk-info`
+}
+type newShards struct {
+	newShards [][]string `json:shard-members`
 }
 
 func makeRange(min, max int) []int {
@@ -46,6 +49,10 @@ func ReshardRoute(view *View, personalSocketAddr string, shards *SharedShardInfo
 			//reshard to put a server on shard one, if (<shards.MinCount) to reshard from shard two, send an error
 		}
 
+		if len(view.PersonalView)/shards.ShardCount < 2 {
+
+		}
+
 		//If we have a new shard count, RESHARD
 		if ns.newShardCount != shards.ShardCount {
 			// Make sure we can have len(view.personalView)/ns.newShardCount >= 2
@@ -66,20 +73,49 @@ func ReshardRoute(view *View, personalSocketAddr string, shards *SharedShardInfo
 }
 
 //Route for chunk replication for new shard data
-func ChunkRoute(view *View, personalSocketAddr string, shards *SharedShardInfo) {
-	shards.Router.PUT("/key-value-store-shard/chunk-r", func(c *gin.Context) {
+func ChunkRoute(view *View, personalSocketAddr string, s *SharedShardInfo) {
+	var b chunkBody
+	s.Router.PUT("/key-value-store-shard/chunk-r", func(c *gin.Context) {
 		//Add everything sent in request to local storage
+		body, err := ioutil.ReadAll(c.Request.Body)
+
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Issue reading bytes from the request body"})
+		}
+		json.Unmarshal(body, &b)
+		//replace whole chunk
+		s.LocalKVStore = b.chunkInfo
+
+		c.JSON(http.StatusOK, gin.H{})
 	})
 }
 
+//Route for updating shard members
+func UpdateShardMembers(s *SharedShardInfo) {
+	var d newShards
+	s.Router.PUT("/key-value-store-shard/updatesm", func(c *gin.Context) {
+		body, err := ioutil.ReadAll(c.Request.Body)
+
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Issue reading bytes from the request body"})
+		}
+		json.Unmarshal(body, &d)
+		s.ShardMembers = d.newShards
+
+		c.JSON(http.StatusOK, gin.H{})
+	})
+
+}
+
 //function to determine what shard we should place k-v pair in
-func hashModN(s string, n uint32) uint32 {
+func hashModN(s string, n int) int {
 	h := fnv.New32a()
 	h.Write([]byte(s))
-	return h.Sum32() % n
+	return int(h.Sum32() % uint32(n))
 }
 
 //Actual resharding algorithm
+//LOCK THIS WHOLE FUNCTION
 func reshard(view *View, personalSocketAddr string, shards *SharedShardInfo, c *gin.Context) {
 	//Basic strategy is brute force
 	//hash IP address, mod N, place in there
@@ -87,52 +123,96 @@ func reshard(view *View, personalSocketAddr string, shards *SharedShardInfo, c *
 	// need to redistribute the KVStore evenly as well
 	// First step to redistribute the replicas and the 2nd step is to rehash the data
 	// Create Map of Maps to be our "chunk" to send to the new shards
-	chunks := make(map[uint32]map[string]StoreVal)
+	chunks := make(map[int]map[string]StoreVal)
 	newShardMembers := [][]string{}
-	var shardResp shardIdResponse
+
 	//First for loop builds newShardMembers
-	//change to be shard loop vs replica by replica
-	for i := 0; i < len(view.PersonalView); i++ {
-		currReplica := view.PersonalView[i]
+	//first sort view before splitting into shards
+
+	sort.Strings(view.PersonalView)
+	toBeSharded := []string{}
+	copy(toBeSharded, view.PersonalView)
+	evenSplit := len(view.PersonalView) / shards.ShardCount //keeps general count for how many replicas we should have in each shard
+	currShardID := 0
+	// while we have replicas to "shard"
+	for len(toBeSharded) > 0 {
+		//move to next shard if we have at least an even split in our current one, otherwise add to currentShard
+		if len(newShardMembers[currShardID]) >= evenSplit {
+			currShardID++
+		} else if currShardID > shards.ShardCount-1 {
+			//If we have already done an even split and there's a remainder of our replicas, just append to last shard and then make array
+			newShardMembers[currShardID] = append(newShardMembers[currShardID-1], toBeSharded...)
+			toBeSharded = nil //or break
+		} else {
+			newShardMembers[currShardID] = append(newShardMembers[currShardID], toBeSharded[0])
+			toBeSharded = toBeSharded[1:]
+		}
+	}
+
+	//Map old IDs so we don't need to worry about things
+	oldShardIDs := make(map[string]int)
+	for idx, row := range shards.ShardMembers {
+		for _, col := range row {
+			oldShardIDs[col] = idx
+		}
+	}
+
+	//going from SC=2 -> SC=3
+	for currentShard := 0; currentShard < len(shards.ShardMembers); currentShard++ {
 		//for each node, hash IP and then mod amount of shards given by our /reshard call
-		//GET the current shard ID of each node
-		getNodeShardID, err := http.NewRequest("GET", "http://"+currReplica+"/key-value-store-shard/node-shard-id", nil)
-		if err != nil {
-			println("AHH ERROR IN RESHARDING")
-		}
-		httpForwarder := &http.Client{Timeout: 5 * time.Second}
-		response, err := httpForwarder.Do(getNodeShardID)
-		if err != nil {
-			println("AHH ERROR IN RESHARDING")
-		}
-		defer response.Body.Close()
-		body, err := ioutil.ReadAll(response.Body)
-		if err != nil {
-			println("AHH ERROR IN RESHARDING")
-		}
-		json.Unmarshal(body, &shardResp)
-		oldShardID := uint32(shardResp.shardId)
-		newShardID := hashModN(currReplica, uint32(shards.ShardCount))
-		if newShardID != oldShardID {
-			// go through local KVStore and check for values that still exist with the same hash
-			// otherwise add to chunk to be sent to new shard
-			for key, value := range shards.LocalKVStore {
-				expectedShardID := hashModN(key, uint32(shards.ShardCount))
-				if expectedShardID != newShardID {
-					//Add to chunk to send to shard
-					chunks[expectedShardID][key] = value
-					//Delete from local shard
-					delete(shards.LocalKVStore, key)
-				}
+		//GET the current shard KVStore for each shard, determine what needs to be rehashed and put in a chunk,
+		//Otherwise keep the store as such
+		shardKV := KvGet(shards.ShardMembers[currentShard][0])
+		oldShardID := currentShard
+		for key, value := range shardKV {
+			newShardID := hashModN(key, shards.ShardCount)
+			chunks[newShardID][key] = value
+			if newShardID != oldShardID {
+				//Delete from the original shardKV
+				delete(shardKV, key)
 			}
 		}
-		newShardMembers[newShardID] = append(newShardMembers[newShardID], currReplica)
 
 	}
 
+	//broadcast new shards out to every replica
+	shards.ShardMembers = newShardMembers
 	//second for loop, broadcasts newShardMembers to every replica in the view
+	updatedShards := newShards{
+		newShards: newShardMembers,
+	}
+	client := &http.Client{}
+	usJSON, err := json.Marshal(updatedShards)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{})
+	}
 	for i := 0; i < len(view.PersonalView); i++ {
-
+		req, err := http.NewRequest(http.MethodPut, "http://"+view.PersonalView[i]+"/key-value-store-shard/updatesm", bytes.newBuffer(usJSON))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{})
+		} else {
+			req.Header.Set("Content-Type", "application/json; charset=utf-8")
+			client.Do(req)
+		}
 	}
 
+	//for loop update new shard KVs
+	for idx, row := range newShardMembers {
+		chunksToSend := chunkBody{
+			chunkInfo: chunks[idx],
+		}
+		kvJSON, err := json.Marshal(chunksToSend)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{})
+		}
+		for _, rep := range row {
+			req, err := http.NewRequest(http.MethodPut, "http://"+rep+"/key-value-store-shard/chunk-r", bytes.newBuffer(kvJSON))
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{})
+			} else {
+				req.Header.Set("Content-Type", "application/json; charset=utf-8")
+				client.Do(req)
+			}
+		}
+	}
 }
