@@ -30,7 +30,8 @@ type fromNode struct {
 func canDeliver(senderVC []int, replicaVC []int) bool {
 	// conditions for delivery:
 	//      senderVC[senderslot] = replicaVC[senderslot] + 1
-	//      senderVC[notsender] <= replicaVC[not sender]
+	//      senderVC[notsender] <= replicaVC[not sender] 	// in your shard
+	//		not in your shard - ignore
 	// r1: [1,0,0]
 	// r2: [0,1,0] "bar"
 	// from r2: [0,1,0]
