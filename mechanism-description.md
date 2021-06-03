@@ -48,3 +48,7 @@ On a 1 second interval timer, on a separate thread, we perform a health check. T
 broadcast GET requests to all other replica's. If replica(s) are down, in the GET request functionality, we add the failed to receive GET response socket address(es) to an array local to each replica. After broadcasting the GET requests, using the information gathered in the array, we can broadcast DELETE requests using each socket address in the array in turn. In the case in which all replica's are down, we delete the replica(s) from our personal view. Otherwise if at least two replica's are currently up, then before sending a response back, the receiver replica deletes the socket address from its own view received in the DELETE request. The operations involved with the health check are performed indefinitely to ensure that all replica's know as soon as possible when a replica goes down or when it comes back up. In the case in which we have a false positive, we just consider the replica to be dead and therefore remove it from all other replica's view. In the scenario in which we get a false negative, when the receiver replica goes down after sending its view, all other replica will learn of this is the next round of broadcast GET requests. Therefore, the false negative won't exist for long and will correct itself soon after. Here is a demonstration of how the health check operates when a replica is down:
 
 ![replica2 is down](src/replica_down.png "replica down")
+
+# Sharding Keys Across Nodes
+
+// TODO
