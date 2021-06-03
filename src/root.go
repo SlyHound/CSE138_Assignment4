@@ -118,10 +118,10 @@ func setupRouter(kvStore map[string]utility.StoreVal, view []string, v *utility.
 		}
 	}
 
-	// utility.GetRequest(router, kvStore, socketIdx, view)
 	utility.ShardPutStore(shard, v, kvStore, socketIdx, currVC)
 	utility.ShardGetStore(shard, v, kvStore, socketIdx, currVC)
-	utility.DeleteRequest(router, kvStore, socketIdx, v.PersonalView, currVC, shard)
+	utility.ShardDeleteStore(shard, v, kvStore, socketIdx, currVC)
+	//utility.DeleteRequest(router, kvStore, socketIdx, v.PersonalView, currVC, shard)
 	utility.ReplicatePut(router, kvStore, socketIdx, v.PersonalView, currVC, shard)
 	utility.ReplicateDelete(router, kvStore, socketIdx, v.PersonalView, currVC, shard)
 	return router
