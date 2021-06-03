@@ -51,4 +51,19 @@ broadcast GET requests to all other replica's. If replica(s) are down, in the GE
 
 # Sharding Keys Across Nodes
 
-// TODO
+In this assignment, we used the following hashing function from a Go package to determine which shard a key value pair will hash into:
+```
+func HashModN(s string, n int) int {
+	h := fnv.New32a()
+	h.Write([]byte(s))
+	return int(h.Sum32() % uint32(n))
+}
+```
+For example, in order to find the shardID that corresponds to a key, we do:
+```
+thisKeysShardID := HashModN(key, numberOfShards)
+```
+
+This function is used to reshard keys, as well as to determine which shard a key should be in for serving KV requests (GET, PUT, DELETE).
+- When resharding, a coordinator node iterates through all keys and assigns them a new "block" based on which shard it belongs to. Once all keys have been assigned to a block, the coordinator node broadcasts each replica its new block, which becomes the new shard assigned to that replica.
+- For KV requests, the replica that serves the request first determines which shard the key belongs to. If it is its own shardID, it serves the request and returns to the client. If instead, it belongs to a different shard, it will forward the request to the first available replica in the correct shard.
