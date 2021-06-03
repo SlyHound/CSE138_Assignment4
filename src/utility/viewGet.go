@@ -62,7 +62,7 @@ func RequestGet(v *View, personalSocketAddr string) ([]string, map[int]string) {
 			}
 			fmt.Println("ATTEMPTING TO SEND 10 MORE TIMES & check err: ", err.Error())
 			// Mu.Mutex.Unlock()
-			httpForwarder := &http.Client{Timeout: 1 * time.Second} // alias for DefaultClient
+			httpForwarder := &http.Client{Timeout: 3 * time.Second} // alias for DefaultClient
 			response, err = httpForwarder.Do(request)
 			// Mu.Mutex.Lock()
 		}

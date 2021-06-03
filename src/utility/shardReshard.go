@@ -11,11 +11,11 @@ import (
 )
 
 type ShardMsg struct {
-	newShardCount int `json:shard-count`
+	NewShardCount int `json:"shard-count"`
 }
 
-type shardIdResponse struct {
-	shardId int `json:shard-id`
+type ShardIdResponse struct {
+	ShardId int `json:"shard-id"`
 }
 
 func makeRange(min, max int) []int {
@@ -30,7 +30,9 @@ func makeRange(min, max int) []int {
 func ReshardRoute(view *View, personalSocketAddr string, shards *SharedShardInfo) {
 	var ns ShardMsg //newShard request
 	shards.Router.PUT("/key-value-store-shard/reshard", func(c *gin.Context) {
+		Mu.Mutex.Lock()
 		startViewSize := len(view.PersonalView) //current length of view to see if new server is added
+		Mu.Mutex.Unlock()
 		body, _ := ioutil.ReadAll(c.Request.Body)
 		json.Unmarshal(body, &ns)
 		//Check if shard request has something in it, otherwise error
@@ -47,7 +49,7 @@ func ReshardRoute(view *View, personalSocketAddr string, shards *SharedShardInfo
 		}
 
 		//If we have a new shard count, RESHARD
-		if ns.newShardCount != shards.ShardCount {
+		if ns.NewShardCount != shards.ShardCount {
 			// Make sure we can have len(view.personalView)/ns.newShardCount >= 2
 			// Otherwise return error
 		}
@@ -77,7 +79,7 @@ func reshard(view *View, personalSocketAddr string, shards *SharedShardInfo, c *
 	//hash IP address, mod N, place in there
 	//first GET preReshard state (store current shard members/view)
 	newShardMembers := [][]string{}
-	var shardResp shardIdResponse
+	var shardResp ShardIdResponse
 	//First for loop builds newShardMembers
 	for i := 0; i < len(view.PersonalView); i++ {
 		currReplica := view.PersonalView[i]
@@ -98,7 +100,7 @@ func reshard(view *View, personalSocketAddr string, shards *SharedShardInfo, c *
 			println("AHH ERROR IN RESHARDING")
 		}
 		json.Unmarshal(body, &shardResp)
-		oldShardID := shardResp.shardId
+		oldShardID := shardResp.ShardId
 		newShardID := Hash(currReplica) % uint32(shards.ShardCount)
 		if newShardID != uint32(oldShardID) {
 			//call KvGet and replace local KvStore with that of replica in newShardID
