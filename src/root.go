@@ -93,7 +93,7 @@ func variousResponses(store map[string]utility.StoreVal, view *utility.View, s *
 	utility.AddNode(view, s)
 	utility.NewShardMember(s, view)
 	utility.ReshardRoute(view, s)
-	utility.UpdateShardMembersRoute(s)
+	utility.UpdateShardMembersRoute(view, s)
 	utility.ChunkRoute(s)
 }
 
