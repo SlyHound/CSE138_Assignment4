@@ -94,7 +94,7 @@ func variousResponses(store map[string]utility.StoreVal, view *utility.View, s *
 	utility.NewShardMember(s, view)
 	utility.ReshardRoute(view, s)
 	utility.UpdateShardMembersRoute(view, s)
-	utility.ChunkRoute(s)
+	utility.ChunkRoute(store, s)
 }
 
 func remove(s []string, i int) []string {
@@ -156,6 +156,7 @@ func main() {
 	shards.ShardCount, _ = strconv.Atoi(shardCount)
 	shards.MinNodes = 2 //default value
 	shards.Router = nil // initialized value (not actually used)
+	shards.LocalKVStore = kvStore
 
 	router := setupRouter(kvStore, view, v, currVC, shards)
 

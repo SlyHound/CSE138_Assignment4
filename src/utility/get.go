@@ -56,7 +56,7 @@ func ShardGetStore(s *SharedShardInfo, view *View, store map[string]StoreVal, lo
 				data := &StoreVal{Value: d.Value, CausalMetadata: d.CausalMetadata}
 				jsonData, _ := json.Marshal(data)
 				fwdRequest, err := http.NewRequest("GET", "http://"+s.ShardMembers[shardId][index]+"/key-value-store/"+key, bytes.NewBuffer(jsonData))
-				fmt.Printf("********DATA BEING SENT: %v********", data)
+				//fmt.Printf("********DATA BEING SENT: %v********", data)
 
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{})

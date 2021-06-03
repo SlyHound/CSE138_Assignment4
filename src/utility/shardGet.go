@@ -88,6 +88,8 @@ func GetNumKeys(kvStore map[string]StoreVal, s *SharedShardInfo) {
 		sentShardId, _ := strconv.Atoi(shardId)
 
 		if sentShardId == s.CurrentShard {
+			fmt.Printf("******* LENGTH OF OUR KVSTORE: %v\n", len(kvStore))
+			fmt.Printf("******* VALUES OUR KVSTORE: %v\n", kvStore)
 			c.JSON(http.StatusOK, gin.H{"message": "Key count of shard ID retrieved successfully", "shard-id-key-count": len(kvStore)})
 		} else { // otherwise request the length of the key value store of the other shard
 			members := GetMembersOfShard(s, sentShardId)

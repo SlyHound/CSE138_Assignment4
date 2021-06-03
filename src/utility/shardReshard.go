@@ -3,11 +3,11 @@ package utility
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"hash/fnv"
 	"io/ioutil"
 	"net/http"
 	"sort"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -57,7 +57,7 @@ func ReshardRoute(view *View, shards *SharedShardInfo) {
 }
 
 //Route for chunk replication for new shard data
-func ChunkRoute(s *SharedShardInfo) {
+func ChunkRoute(store map[string]StoreVal, s *SharedShardInfo) {
 	var b chunkBody
 	s.Router.PUT("/key-value-store-shard/chunk-r", func(c *gin.Context) {
 		//Add everything sent in request to local storage
@@ -67,9 +67,16 @@ func ChunkRoute(s *SharedShardInfo) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Issue reading bytes from the request body"})
 		}
 		json.Unmarshal(body, &b)
-		fmt.Printf("********* CHUNK INFO: %v\n", b.ChunkInfo)
 		//replace whole chunk
+		Mu.Mutex.Lock()
+		for k := range store{
+			delete(store, k)
+		}
+		for k, v := range b.ChunkInfo{
+			store[k] = v
+		}
 		s.LocalKVStore = b.ChunkInfo
+		Mu.Mutex.Unlock()
 
 		c.JSON(http.StatusOK, gin.H{})
 	})
@@ -85,6 +92,7 @@ func UpdateShardMembersRoute(view *View, s *SharedShardInfo) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Issue reading bytes from the request body"})
 		}
 		json.Unmarshal(body, &d)
+		Mu.Mutex.Lock()
 		s.ShardMembers = d.NewShards
 		//update shard ID as well
 		for idx, row := range s.ShardMembers {
@@ -94,9 +102,7 @@ func UpdateShardMembersRoute(view *View, s *SharedShardInfo) {
 				}
 			}
 		}
-
-		fmt.Printf("********* NEWSHARD JSON %v\n", d.NewShards)
-		fmt.Printf("********* NEWSHARD MEMBERS %v\n", s.ShardMembers)
+		Mu.Mutex.Unlock()
 
 		c.JSON(http.StatusOK, gin.H{})
 	})
@@ -120,6 +126,9 @@ func reshard(view *View, shards *SharedShardInfo, c *gin.Context) {
 	// First step to redistribute the replicas and the 2nd step is to rehash the data
 	// Create Map of Maps to be our "chunk" to send to the new shards
 	chunks := make(map[int]map[string]StoreVal)
+	for i := 0; i < shards.ShardCount; i++ {
+		chunks[i] = make(map[string]StoreVal)
+	}
 	newShardMembers := make([][]string, shards.ShardCount)
 	//First for loop builds newShardMembers
 	//first sort view before splitting into shards
@@ -129,15 +138,13 @@ func reshard(view *View, shards *SharedShardInfo, c *gin.Context) {
 	evenSplit := len(view.PersonalView) / shards.ShardCount //keeps general count for how many replicas we should have in each shard
 	currShardID := 0
 	// while we have replicas to "shard"
-	fmt.Printf("******** TOBESHARDED: %v\n", toBeSharded)
 	for len(toBeSharded) > 0 {
 		//move to next shard if we have at least an even split in our current one, otherwise add to currentShard
-		fmt.Printf("******** NEWSHARDMEMBERS: %v\n", newShardMembers)
-		fmt.Printf("******** currShardID: %v\n", currShardID)
 		if currShardID > shards.ShardCount-1 {
 			//If we have already done an even split and there's a remainder of our replicas, just append to last shard and then make array
 			newShardMembers[currShardID-1] = append(newShardMembers[currShardID-1], toBeSharded...)
 			toBeSharded = nil //or break
+			break
 		}
 		newShardMembers[currShardID] = append(newShardMembers[currShardID], toBeSharded[0])
 		toBeSharded = toBeSharded[1:]
@@ -172,15 +179,13 @@ func reshard(view *View, shards *SharedShardInfo, c *gin.Context) {
 
 	}
 
-	fmt.Printf("********* CURRENTSHARD MEMBERS %v\n", shards.ShardMembers)
-	fmt.Printf("********* NEWSHARD MEMBERS %v\n", newShardMembers)
 	//broadcast new shards out to every replica
 	shards.ShardMembers = newShardMembers
 	//second for loop, broadcasts newShardMembers to every replica in the view
 	updatedShards := newShards{
 		NewShards: newShardMembers,
 	}
-	client := &http.Client{}
+	client := &http.Client{Timeout: 5 * time.Second}
 	usJSON, err := json.Marshal(updatedShards)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error in resharding process"})
