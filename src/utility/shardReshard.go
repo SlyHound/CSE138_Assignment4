@@ -3,6 +3,7 @@ package utility
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"hash/fnv"
 	"io/ioutil"
 	"net/http"
@@ -16,10 +17,10 @@ type ShardMsg struct {
 }
 
 type chunkBody struct {
-	chunkInfo map[string]StoreVal `json:"chunk-info"`
+	ChunkInfo map[string]StoreVal `json:"chunk-info"`
 }
 type newShards struct {
-	newShards [][]string `json:"shard-members"`
+	NewShards [][]string `json:"shard-members"`
 }
 
 func makeRange(min, max int) []int {
@@ -43,12 +44,15 @@ func ReshardRoute(view *View, shards *SharedShardInfo) {
 		}
 		//Check if shard request has something in it, otherwise error
 		defer c.Request.Body.Close()
-		println(ns.ShardCount)
+		Mu.Mutex.Lock()
+		println(len(view.PersonalView))
+		println(len(view.PersonalView) / ns.ShardCount)
 		if len(view.PersonalView)/ns.ShardCount < 2 {
 			c.JSON(http.StatusBadRequest, gin.H{"message": "Not enough nodes to provide fault-tolerance with the given shard count!"})
 		} else {
 			reshard(view, shards, c)
 		}
+		Mu.Mutex.Unlock()
 	})
 
 }
@@ -65,7 +69,7 @@ func ChunkRoute(s *SharedShardInfo) {
 		}
 		json.Unmarshal(body, &b)
 		//replace whole chunk
-		s.LocalKVStore = b.chunkInfo
+		s.LocalKVStore = b.ChunkInfo
 
 		c.JSON(http.StatusOK, gin.H{})
 	})
@@ -81,7 +85,9 @@ func UpdateShardMembersRoute(s *SharedShardInfo) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Issue reading bytes from the request body"})
 		}
 		json.Unmarshal(body, &d)
-		s.ShardMembers = d.newShards
+		s.ShardMembers = d.NewShards
+		fmt.Printf("********* NEWSHARD JSON %v\n", d.NewShards)
+		fmt.Printf("********* NEWSHARD MEMBERS %v\n", s.ShardMembers)
 
 		c.JSON(http.StatusOK, gin.H{})
 	})
@@ -111,22 +117,23 @@ func reshard(view *View, shards *SharedShardInfo, c *gin.Context) {
 	//first sort view before splitting into shards
 
 	sort.Strings(view.PersonalView)
-	toBeSharded := []string{}
-	copy(toBeSharded, view.PersonalView)
+	toBeSharded := view.PersonalView
 	evenSplit := len(view.PersonalView) / shards.ShardCount //keeps general count for how many replicas we should have in each shard
 	currShardID := 0
 	// while we have replicas to "shard"
+	fmt.Printf("******** TOBESHARDED: %v\n", toBeSharded)
 	for len(toBeSharded) > 0 {
 		//move to next shard if we have at least an even split in our current one, otherwise add to currentShard
+		fmt.Printf("******** NEWSHARDMEMBERS: %v\n", newShardMembers)
+		fmt.Printf("******** currShardID: %v\n", currShardID)
+		newShardMembers[currShardID] = append(newShardMembers[currShardID], toBeSharded[0])
+		toBeSharded = toBeSharded[1:]
 		if len(newShardMembers[currShardID]) >= evenSplit {
 			currShardID++
 		} else if currShardID > shards.ShardCount-1 {
 			//If we have already done an even split and there's a remainder of our replicas, just append to last shard and then make array
 			newShardMembers[currShardID] = append(newShardMembers[currShardID-1], toBeSharded...)
 			toBeSharded = nil //or break
-		} else {
-			newShardMembers[currShardID] = append(newShardMembers[currShardID], toBeSharded[0])
-			toBeSharded = toBeSharded[1:]
 		}
 	}
 
@@ -156,11 +163,13 @@ func reshard(view *View, shards *SharedShardInfo, c *gin.Context) {
 
 	}
 
+	fmt.Printf("********* CURRENTSHARD MEMBERS %v\n", shards.ShardMembers)
+	fmt.Printf("********* NEWSHARD MEMBERS %v\n", newShardMembers)
 	//broadcast new shards out to every replica
 	shards.ShardMembers = newShardMembers
 	//second for loop, broadcasts newShardMembers to every replica in the view
 	updatedShards := newShards{
-		newShards: newShardMembers,
+		NewShards: newShardMembers,
 	}
 	client := &http.Client{}
 	usJSON, err := json.Marshal(updatedShards)
@@ -180,7 +189,7 @@ func reshard(view *View, shards *SharedShardInfo, c *gin.Context) {
 	//for loop update new shard KVs
 	for idx, row := range newShardMembers {
 		chunksToSend := chunkBody{
-			chunkInfo: chunks[idx],
+			ChunkInfo: chunks[idx],
 		}
 		kvJSON, err := json.Marshal(chunksToSend)
 		if err != nil {
