@@ -17,15 +17,16 @@ type allMembers struct {
 	receivedShardMembers [][]string // member of all shards that is received from the node that is broadcasting
 }
 
-// type receivedMembers struct {
-// 	Message string     `json:"message"`
-// 	Members [][]string `json:"shard-id-members"` // members received from /shard-id-members endpoint
-// }
+type receivedMembers struct {
+	Message string     `json:"message"`
+	Members [][]string `json:"shard-id-members"` // members received from /shard-id-members endpoint
+}
 
 // adds a new node to a given shard
 func AddNode(v *View, s *SharedShardInfo) {
 	var (
 		d Body // Body struct defined in viewPut.go //
+		m receivedMembers
 	)
 	s.Router.PUT("/key-value-store-shard/add-member/:id", func(c *gin.Context) {
 		shardId := c.Param("id")
@@ -38,39 +39,41 @@ func AddNode(v *View, s *SharedShardInfo) {
 		json.Unmarshal(body, &d)
 		intShardId, _ := strconv.Atoi(shardId)
 
-		// first we need to get the members of our shard, so broadcast a GET request to all shards (only need one response back) //
-		// Mu.Mutex.Lock()
-		// for index := range v.PersonalView {
-		// 	request, err := http.NewRequest("GET", "http://"+v.PersonalView[index]+"/key-value-store-shard/shard-id-all_members/"+shardId, nil)
+		// the add-member request could be sent to the new node, so we need to first get the members of its shard (since it doesn't know them)
+		Mu.Mutex.Lock()
+		if len(s.ShardMembers) == 0 {
+			for index := range v.PersonalView {
+				request, err := http.NewRequest("GET", "http://"+v.PersonalView[index]+"/key-value-store-shard/shard-id-members/"+shardId, nil)
 
-		// 	if err != nil {
-		// 		Mu.Mutex.Unlock()
-		// 		log.Fatal("error attempting to create a new GET request:", err.Error())
-		// 	}
+				if err != nil {
+					Mu.Mutex.Unlock()
+					log.Fatal("error attempting to create a new GET request:", err.Error())
+				}
 
-		// 	Mu.Mutex.Unlock()
-		// 	httpForwarder := &http.Client{} // alias for DefaultClient
-		// 	response, err := httpForwarder.Do(request)
-		// 	Mu.Mutex.Lock()
+				Mu.Mutex.Unlock()
+				httpForwarder := &http.Client{} // alias for DefaultClient
+				response, err := httpForwarder.Do(request)
+				Mu.Mutex.Lock()
 
-		// 	// the node could be down when attempting to send to it, so we continue to attempt to send to the other nodes //
-		// 	if err != nil {
-		// 		continue
-		// 	}
-		// 	defer response.Body.Close()
-		// 	body, _ := ioutil.ReadAll(response.Body)
-		// 	json.Unmarshal(body, &m)
+				// the node could be down when attempting to send to it, so we continue to attempt to send to the other nodes //
+				if err != nil {
+					continue
+				}
+				defer response.Body.Close()
+				body, _ := ioutil.ReadAll(response.Body)
+				json.Unmarshal(body, &m)
 
-		// 	s.ShardMembers = make([][]string, len(m.Members))
+				s.ShardMembers = make([][]string, len(m.Members))
 
-		// 	for index := range m.Members {
-		// 		s.ShardMembers[index] = append(s.ShardMembers[index], m.Members[index]...)
-		// 	}
-		// 	fmt.Printf("****s.ShardMembers IN shardPut.go: %v*******", s.ShardMembers)
-		// 	s.CurrentShard = GetCurrentShardId(s, v.SocketAddr)
-		// 	break // once we retrieve the shard members successfully, we can stop broadcasting
-		// }
-		// Mu.Mutex.Unlock()
+				for index := range m.Members {
+					s.ShardMembers[index] = append(s.ShardMembers[index], m.Members[index]...)
+				}
+				fmt.Printf("****s.ShardMembers IN shardPut.go: %v*******", s.ShardMembers)
+				s.CurrentShard = GetCurrentShardId(s, v.SocketAddr)
+				break // once we retrieve the shard members successfully, we can stop broadcasting
+			}
+		}
+		Mu.Mutex.Unlock()
 
 		index := 0
 		Mu.Mutex.Lock()
@@ -131,7 +134,6 @@ func NewShardMember(s *SharedShardInfo, view *View) {
 		Mu.Mutex.Lock()
 		if len(s.ShardMembers) == 0 {
 			s.ShardMembers = make([][]string, len(am.receivedShardMembers))
-			// s.CurrentShard = GetCurrentShardId(s, view.SocketAddr)
 		}
 		for shardIndex, shardMembers := range am.receivedShardMembers {
 			s.ShardMembers[shardIndex] = append(s.ShardMembers[shardIndex], shardMembers...)

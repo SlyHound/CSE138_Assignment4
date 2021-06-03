@@ -19,7 +19,7 @@ const (
 // checks to ensure that replica's are up by broadcasting GET requests //
 func healthCheck(view *utility.View, personalSocketAddr string, kvStore map[string]utility.StoreVal, s *utility.SharedShardInfo) {
 
-	time.Sleep(2 * time.Second) // sleep to attempt to synchronize startup of all nodes
+	time.Sleep(3 * time.Second) // sleep to attempt to synchronize startup of all nodes
 	// runs infinitely on a 1 second clock interval //
 	interval := time.Tick(time.Second * 1)
 	for range interval {
@@ -121,10 +121,10 @@ func setupRouter(kvStore map[string]utility.StoreVal, view []string, v *utility.
 		}
 	}
 
-	// utility.GetRequest(router, kvStore, socketIdx, view)
 	utility.ShardPutStore(shard, v, kvStore, socketIdx, currVC)
 	utility.ShardGetStore(shard, v, kvStore, socketIdx, currVC)
-	utility.DeleteRequest(router, kvStore, socketIdx, v.PersonalView, currVC, shard)
+	utility.ShardDeleteStore(shard, v, kvStore, socketIdx, currVC)
+	//utility.DeleteRequest(router, kvStore, socketIdx, v.PersonalView, currVC, shard)
 	utility.ReplicatePut(router, kvStore, socketIdx, v.PersonalView, currVC, shard)
 	utility.ReplicateDelete(router, kvStore, socketIdx, v.PersonalView, currVC, shard)
 	return router
@@ -159,15 +159,13 @@ func main() {
 
 	router := setupRouter(kvStore, view, v, currVC, shards)
 
-	if shardCount != "" {
+	if shardCount != "" { // only applies to add-member PUT request, where SHARD_COUNT isn't provided
 		utility.InitialSharding(shards, v, shardCount)
 		shards.CurrentShard = utility.GetCurrentShardId(shards, socketAddr)
 	}
 
-	go healthCheck(v, socketAddr, kvStore, shards)
-
 	variousResponses(kvStore, v, shards)
-
+	go healthCheck(v, socketAddr, kvStore, shards)
 	err := router.Run(port)
 
 	if err != nil {

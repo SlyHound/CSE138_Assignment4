@@ -112,7 +112,6 @@ func reshard(view *View, shards *SharedShardInfo, c *gin.Context) {
 	// Create Map of Maps to be our "chunk" to send to the new shards
 	chunks := make(map[int]map[string]StoreVal)
 	newShardMembers := [][]string{}
-
 	//First for loop builds newShardMembers
 	//first sort view before splitting into shards
 

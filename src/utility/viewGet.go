@@ -53,19 +53,20 @@ func RequestGet(v *View, personalSocketAddr string) ([]string, map[int]string) {
 		Mu.Mutex.Unlock()
 		httpForwarder := &http.Client{Timeout: 3 * time.Second} // alias for DefaultClient
 		response, err := httpForwarder.Do(request)
-		Mu.Mutex.Lock()
+		// Mu.Mutex.Lock()
 
-		// try to send a GET request 5 more times //
-		for i := 0; i < 5; i++ {
+		// try to send a GET request 10 more times //
+		for i := 0; i < 10; i++ {
 			if err == nil {
 				break
 			}
-			fmt.Println("ATTEMPTING TO SEND 5 MORE TIMES & check err: ", err.Error())
-			Mu.Mutex.Unlock()
-			httpForwarder := &http.Client{Timeout: 1 * time.Second} // alias for DefaultClient
+			fmt.Println("ATTEMPTING TO SEND 10 MORE TIMES & check err: ", err.Error())
+			// Mu.Mutex.Unlock()
+			httpForwarder := &http.Client{Timeout: 3 * time.Second} // alias for DefaultClient
 			response, err = httpForwarder.Do(request)
-			Mu.Mutex.Lock()
+			// Mu.Mutex.Lock()
 		}
+		Mu.Mutex.Lock()
 
 		fmt.Println("Check personalView length in viewGet.go: ", len(v.PersonalView))
 		if err != nil { // if a response doesn't come back, then that replica might be down, so try again 2 more times
@@ -120,11 +121,9 @@ func KvGet(replica string) map[string]StoreVal {
 func ResponseGet(r *gin.Engine, view *View) {
 	r.GET("/key-value-store-view", func(c *gin.Context) {
 		fmt.Println("GET rqst. received")
-		Mu.Mutex.Lock()
-		// copiedView := make([]string, len(view.PersonalView))
-		// copiedView = append(copiedView, view.PersonalView...)
+		// Mu.Mutex.Lock()
 		c.JSON(http.StatusOK, gin.H{"message": "View retrieved successfully", "view": view.PersonalView})
-		Mu.Mutex.Unlock()
+		// Mu.Mutex.Unlock()
 	})
 }
 
