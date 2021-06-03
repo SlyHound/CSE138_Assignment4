@@ -3,6 +3,10 @@
 ## Acknowledgements
 
 ## Citations
+- https://golang.org/pkg/hash/fnv/
+
+This Go package provides the hash function that we use to determine which shard a key will hash into.
+
 
 ## Team Contributions
 
