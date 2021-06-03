@@ -12,14 +12,14 @@ import (
 )
 
 type ShardMsg struct {
-	newShardCount int `json:shard-count`
+	ShardCount int `json:"shard-count"`
 }
 
 type chunkBody struct {
-	chunkInfo map[string]StoreVal `json:chunk-info`
+	chunkInfo map[string]StoreVal `json:"chunk-info"`
 }
 type newShards struct {
-	newShards [][]string `json:shard-members`
+	newShards [][]string `json:"shard-members"`
 }
 
 func makeRange(min, max int) []int {
@@ -35,6 +35,7 @@ func ReshardRoute(view *View, shards *SharedShardInfo) {
 	var ns ShardMsg //newShard request
 	shards.Router.PUT("/key-value-store-shard/reshard", func(c *gin.Context) {
 		body, _ := ioutil.ReadAll(c.Request.Body)
+		println(string(body[:]))
 		err := json.Unmarshal(body, &ns)
 		if err != nil {
 			println("ERROR IN UNMARSHALLING")
@@ -42,7 +43,8 @@ func ReshardRoute(view *View, shards *SharedShardInfo) {
 		}
 		//Check if shard request has something in it, otherwise error
 		defer c.Request.Body.Close()
-		if len(view.PersonalView)/ns.newShardCount < 2 {
+		println(ns.ShardCount)
+		if len(view.PersonalView)/ns.ShardCount < 2 {
 			c.JSON(http.StatusBadRequest, gin.H{"message": "Not enough nodes to provide fault-tolerance with the given shard count!"})
 		} else {
 			reshard(view, shards, c)
