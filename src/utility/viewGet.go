@@ -43,49 +43,38 @@ func RequestGet(v *View, personalSocketAddr string) ([]string, map[int]string) {
 			continue
 		}
 		fmt.Println("allSocketAddrs[index], index:", v.PersonalView[index], index)
-		// the line below somehow causes an index out of bounds exception sometimes, but how we're in a lock?
 		request, err := http.NewRequest("GET", "http://"+v.PersonalView[index]+"/key-value-store-view", nil)
-
 		if err != nil {
 			log.Fatal("There was an error creating a GET request with the following error:", err.Error())
 		}
 
 		Mu.Mutex.Unlock()
-		httpForwarder := &http.Client{Timeout: 3 * time.Second} // alias for DefaultClient
-		response, err := httpForwarder.Do(request)
-		// Mu.Mutex.Lock()
-
-		// try to send a GET request 10 more times //
-		for i := 0; i < 10; i++ {
-			if err == nil {
-				break
-			}
-			fmt.Println("ATTEMPTING TO SEND 10 MORE TIMES & check err: ", err.Error())
-			// Mu.Mutex.Unlock()
+		// try to send a GET request 5 times //
+		var response *http.Response
+		for i := 0; i < 5; i++ {
 			httpForwarder := &http.Client{Timeout: 3 * time.Second} // alias for DefaultClient
 			response, err = httpForwarder.Do(request)
-			// Mu.Mutex.Lock()
+			if err != nil {
+				time.Sleep(time.Second * 3)
+				fmt.Printf("ATTEMPTING TO SEND %v MORE TIMES & check err: %v", i, err.Error())
+			} else {
+				break
+			}
 		}
 		Mu.Mutex.Lock()
-
 		fmt.Println("Check personalView length in viewGet.go: ", len(v.PersonalView))
-		if err != nil { // if a response doesn't come back, then that replica might be down, so try again 2 more times
+		if err != nil { // if a response doesn't come back, then that replica might be down
 			fmt.Println("There was an error sending a GET request to " + v.PersonalView[index])
 			noResponseIndices[index] = v.PersonalView[index]
 			continue
 		}
-		// fmt.Println("Check response.Body in RequestGet:", response.Body)
-		defer response.Body.Close()
 		body, _ := ioutil.ReadAll(response.Body)
 		strBody := string(body[:])
-		// fmt.Println("Check strBody in RequestGet:", strBody)
 		json.NewDecoder(strings.NewReader(strBody)).Decode(&g)
-		// fmt.Println("Check v.View, V.Message in RequestGet:", v.View, v.Message)
-		// fmt.Println("Checking allSocketAddrs at end of rqstGet:", v)
+		response.Body.Close()
 	}
 	Mu.Mutex.Unlock()
-	// fmt.Println("Check the v.View is about to be returned:", g.View)
-	// fmt.Println("Check allSocketAddrs before returning v.View:", v)
+
 	return g.View, noResponseIndices
 }
 
