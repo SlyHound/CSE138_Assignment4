@@ -49,6 +49,18 @@ broadcast GET requests to all other node's. If node(s) are down, in the GET requ
 
 ![replica2 is down](src/replica_down.png "replica down")
 
+
+
+# Resharding Process
+
+When a node is given a request to the `/key-value-store-shard/reshard` endpoint, we first determine if it is a valid reshard request by checking if the amount of total replicas divided by the new shard count is greater than 2 (so we can have at least 2 replicas in each shard). the new set of shards given our shard count and the current replicas that are up. The way we determine which replica is in which shard is a simple sort and split.
+
+First we sort all the replicas that are available, and from there we divide them into `N` subarrays where `N` is the number of shards given in the request to our node. We make sure each subarray (shard) has an "even split" amount of replicas in it, then we move to the next one. The "even split" is the amount of replicas divided by the number of shards, so we can get as close to an even split possible for all the shards.
+
+If there are any extra replicas after we have given at our even split of replicas to each shard, the extras are put in the last shard in the list. For example, if we had 10 replicas with a `shard-count` of 3, then the replica distribution would look like this: (3,3,4).  The node then sends out those updates along the `/key-value-store-shard/updatesm` endpoint to update the Shard Members across all replicas. 
+
+After we update the shard members, we shard our keys across all nodes, which is described in the section below.
+
 # Sharding Keys Across Nodes
 
 In this assignment, we used the following hashing function from a Go package to determine which shard a key value pair will hash into:
