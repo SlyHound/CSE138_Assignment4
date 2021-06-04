@@ -33,4 +33,4 @@ Oleksiy Omelchenko: Worked on all the GET shard operations and PUT shard operati
 
 Zach Zulanas: He implemented the resharding functionality and the hash function that was used for his own code and by the other two team members. The endpoint that he worked on was `/key-value-store-shard/reshard`. Designed the resharding strategy and implemented shard to shard communication to update the KVStore after resharding using `/key-value-store-shard/chunk-r` and `/key-value-store-shard/updatesm` to update the shard members after resharding.
 
-Jackie Garcia: Implemented the key-value store requests for GET and DELETE requests on the `\key-value-store\key` endpoint. 
+Jackie Garcia: Implemented the key-value store requests for GET and DELETE requests on the `\key-value-store\key` endpoint. Designed new KV request strategy for GET and DELETE that ensures causal consistency even if replicas within a shard are not yet up to date by forwarding requests to other replicas within a shard. Additionally, handled forwarding requests when the replica is outside the shard where the key requested hashes to.
