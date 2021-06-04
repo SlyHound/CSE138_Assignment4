@@ -1,10 +1,20 @@
 # Ensuring Causal Consistency
 
 ## causal-metadata
-For our causal-metadata, we pass in an array of length 4: [R1, R2, R3, P]
+For our causal-metadata, we pass in an array of length N + 1, where N is the number of replicas
+- EG, if we have 3 replicas, our Vector Clock would be [R1, R2, R3, P]
 - [R1, R2, R3] represent the Vector Clock values for each of our three replicas
 - P indicates what the position of the sender replica is
   -  For example, if Replica 1 was sending its VC [2, 0, 2], causal-metadata would be [2, 0, 2, 0]
+
+Some changes were made to support shard groups from the original Assignment 3 code:
+- The vector clock represents all replicas that are up, regardless of what shard they are in.
+- When determining if a message can be delivered, we consider only the slots that represent replicas in our own shard
+  -  For example, if Replica 1 is in Shard 1 with Replicas 2 and 3, the VC would be [R1, R2, R3, R4, R5, P]
+  -  Only R2 and R3 would be considered, and R4 and R5 would remain unchanged
+- We chose to do this since it would be easier to pass along the entire VC each time
+- This way, the client can send our VC back without knowledge of which shard it is interacting with
+
 
 ## Causal Broadcasts
 In order to keep consistent replicas, whichever process serves a request from the client (that updates the key-value store) sends this update to the other replicas. These are PUT and DELETE requests.
