@@ -33,7 +33,10 @@ func ShardGetStore(s *SharedShardInfo, view *View, store map[string]StoreVal, lo
 		json.Unmarshal(data, &d)
 		defer c.Request.Body.Close()
 
-		shardId := HashModN(view.SocketAddr, s.ShardCount)
+		
+		shardId := HashModN(key, s.ShardCount)
+		fmt.Printf("****** SHARDID FOR GET REQUEST: %v\n", shardId)
+		fmt.Printf("****** KEY FOR GET REQUEST: %v\n", key)
 
 		if strBody == "{}" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Value is missing", "message": "Error in GET"})
@@ -51,34 +54,34 @@ func ShardGetStore(s *SharedShardInfo, view *View, store map[string]StoreVal, lo
 						// otherwise, check other replicas in the shard
 						continue
 					}
+				} else{ 
+					data := &StoreVal{Value: d.Value, CausalMetadata: d.CausalMetadata}
+					jsonData, _ := json.Marshal(data)
+					fwdRequest, err := http.NewRequest("GET", "http://"+s.ShardMembers[shardId][index]+"/key-value-store/"+key, bytes.NewBuffer(jsonData))
+					//fmt.Printf("********DATA BEING SENT: %v********", data)
+	
+					if err != nil {
+						c.JSON(http.StatusInternalServerError, gin.H{})
+						break
+					}
+	
+					httpForwarder := &http.Client{Timeout: 5 * time.Second}
+					response, err := httpForwarder.Do(fwdRequest)
+	
+					// if err != nil{
+					// right now must keep the status code version since replication is not implemented
+					if err != nil || response.StatusCode != 200 { // if an error occurs, assume the node is dead, so continue attempting to send to another node in the provided shard
+						continue
+					}
+	
+					body, _ := ioutil.ReadAll(response.Body)
+					defer response.Body.Close()
+					// jsonData = json.RawMessage(body)
+					json.Unmarshal(body, &gn)
+					fmt.Printf("********CHECK BODY BEING SENT: %v********", string(body[:]))
+					c.JSON(response.StatusCode, gin.H{"message": gn.Message, "causal-metadata": gn.CausalMetadata, "value": gn.Value})
+					break // if we managed to receive a response back after forwarding, don't forward to other nodes in that same shard
 				}
-
-				data := &StoreVal{Value: d.Value, CausalMetadata: d.CausalMetadata}
-				jsonData, _ := json.Marshal(data)
-				fwdRequest, err := http.NewRequest("GET", "http://"+s.ShardMembers[shardId][index]+"/key-value-store/"+key, bytes.NewBuffer(jsonData))
-				//fmt.Printf("********DATA BEING SENT: %v********", data)
-
-				if err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{})
-					break
-				}
-
-				httpForwarder := &http.Client{Timeout: 5 * time.Second}
-				response, err := httpForwarder.Do(fwdRequest)
-
-				// if err != nil{
-				// right now must keep the status code version since replication is not implemented
-				if err != nil || response.StatusCode != 200 { // if an error occurs, assume the node is dead, so continue attempting to send to another node in the provided shard
-					continue
-				}
-
-				body, _ := ioutil.ReadAll(response.Body)
-				defer response.Body.Close()
-				// jsonData = json.RawMessage(body)
-				json.Unmarshal(body, &gn)
-				fmt.Printf("********CHECK BODY BEING SENT: %v********", string(body[:]))
-				c.JSON(response.StatusCode, gin.H{"message": gn.Message, "causal-metadata": gn.CausalMetadata, "value": gn.Value})
-				break // if we managed to receive a response back after forwarding, don't forward to other nodes in that same shard
 			}
 		}
 	})

@@ -123,7 +123,7 @@ func ShardPutStore(s *SharedShardInfo, view *View, store map[string]StoreVal, lo
 		json.Unmarshal(data, &d)
 		defer c.Request.Body.Close()
 
-		shardId := HashModN(view.SocketAddr, s.ShardCount)
+		shardId := HashModN(key, s.ShardCount)
 
 		if strBody == "{}" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Value is missing", "message": "Error in PUT"})
