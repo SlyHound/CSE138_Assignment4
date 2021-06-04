@@ -59,11 +59,18 @@ func HashModN(s string, n int) int {
 	return int(h.Sum32() % uint32(n))
 }
 ```
+
+This function takes a string `s` and an int `n`, where `s` is the value to be hashed (our key), and `n` is the amount of shards we have. This is based off of the sharding approach we learned in class where we hash the key value, then take the mod of the hashed key by the amount of shards to determine what shard our key ends up in. We have tested this approach rigourously and it gives us a pretty even split in keys to shards.
+
+We use the `hash/fnv` library from the Go standard library. We implement a 32 bit FNV-1 hash and use that to hash our keys. The FNV hash is the Fowler–Noll–Vo hash function. We chose to use it since it was easy to implement in Go, it's relatively fast, and it has a low collision rate.
+
 For example, in order to find the shardID that corresponds to a key, we do:
 ```
 thisKeysShardID := HashModN(key, numberOfShards)
 ```
 
 This function is used to reshard keys, as well as to determine which shard a key should be in for serving KV requests (GET, PUT, DELETE).
-- When resharding, a coordinator node iterates through all keys and assigns them a new "block" based on which shard it belongs to. Once all keys have been assigned to a block, the coordinator node broadcasts each replica its new block, which becomes the new shard assigned to that replica.
+- When resharding, a coordinator node iterates through all keys and assigns them a new "chunk" based on which shard it belongs to. These chunks are basically the KVStore for each shard. Once all keys have been assigned to a chunk, the coordinator node broadcasts each replica in a given shard its new chunk, which becomes the new KVStore for said replica and all replicas in that shard.
 - For KV requests, the replica that serves the request first determines which shard the key belongs to. If it is its own shardID, it serves the request and returns to the client. If instead, it belongs to a different shard, it will forward the request to the first available replica in the correct shard.
+
+The drawbacks to using this approach is that if our coordinator node fails/goes down during resharding, then our whole process will fail. We deemed that pretty unlikely, and our resharding process happens fast enough so that it didn't seem like a large enough issue to work around for this case. It would be much more complicated to deal with doing a resharding process across multiple nodes versus having one do all the work and distribute the correct data as well.
