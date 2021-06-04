@@ -1,23 +1,95 @@
 package utility
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-//GetRequest for client interaction
-func GetRequest(r *gin.Engine, dict map[string]StoreVal, local_addr int, view []string) {
+// struct designed for decoding JSON data received from a node in a different shard
+type getNode struct {
+	Message        string `json:"message"`
+	CausalMetadata []int  `json:"causal-metadata"`
+	Value          string `json:"value"`
+}
 
-	r.GET("/key-value-store/:key", func(c *gin.Context) {
+func ShardGetStore(s *SharedShardInfo, view *View, store map[string]StoreVal, localAddr int, currVC []int) {
+
+	var (
+		d  StoreVal
+		gn getNode
+	)
+
+	s.Router.GET("/key-value-store/:key", func(c *gin.Context) {
 		key := c.Param("key")
 
-		// if the key-value pair exists, then just return it //
-		if value, exists := dict[key]; exists {
-			c.JSON(http.StatusOK, gin.H{"doesExist": true, "message": "Retrieved successfully", "value": value.Value, "causal-metadata": value.CausalMetadata[0:3]})
+		data, _ := ioutil.ReadAll(c.Request.Body)
+		strBody := string(data[:])
+		json.Unmarshal(data, &d)
+		c.Request.Body.Close()
+
+		Mu.Mutex.Lock()
+		shardId := HashModN(key, s.ShardCount)
+		Mu.Mutex.Unlock()
+		fmt.Printf("****** SHARD COUNT: %v\n", s.ShardCount)
+		fmt.Printf("****** SHARDID FOR GET REQUEST: %v\n", shardId)
+		fmt.Printf("****** KEY FOR GET REQUEST: %v\n", key)
+
+		if strBody == "{}" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Value is missing", "message": "Error in GET"})
+		} else if len(key) > keyLimit {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Key is too long", "message": "Error in GET"})
 		} else {
-			c.JSON(http.StatusNotFound, gin.H{"doesExist": false, "error": "Key does not exist", "message": "Error in GET"})
+			// have to forward request to the first available replica in the correct shard
+			Mu.Mutex.Lock()
+			for index, member := range s.ShardMembers[shardId] {
+				if member == view.SocketAddr {
+					if value, exists := store[key]; exists {
+						fmt.Println("******INSIDE THIS REPLICA!!!")
+						// if the key is in this replica, just return it
+						c.JSON(http.StatusOK, gin.H{"doesExist": true, "message": "Retrieved successfully", "value": value.Value, "causal-metadata": value.CausalMetadata})
+						break
+					} else {
+						// otherwise, check other replicas in the shard
+						fmt.Println("******NOT IN THIS REPLICA :(")
+						continue
+					}
+				} else {
+					fmt.Printf("****** FORWARDING REQ TO REPLICA %v\n", s.ShardMembers[shardId][index])
+					data := &StoreVal{Value: d.Value, CausalMetadata: d.CausalMetadata}
+					jsonData, _ := json.Marshal(data)
+					fwdRequest, err := http.NewRequest("GET", "http://"+s.ShardMembers[shardId][index]+"/key-value-store/"+key, bytes.NewBuffer(jsonData))
+					//fmt.Printf("********DATA BEING SENT: %v********", data)
+
+					if err != nil {
+						c.JSON(http.StatusInternalServerError, gin.H{})
+						break
+					}
+
+					Mu.Mutex.Unlock()
+					httpForwarder := &http.Client{Timeout: 5 * time.Second}
+					response, err := httpForwarder.Do(fwdRequest)
+					Mu.Mutex.Lock()
+
+					// right now must keep the status code version since replication is not implemented
+					if err != nil || response.StatusCode != 200 { // if an error occurs, assume the node is dead, so continue attempting to send to another node in the provided shard
+						continue
+					}
+
+					body, _ := ioutil.ReadAll(response.Body)
+					json.Unmarshal(body, &gn)
+					fmt.Printf("********CHECK BODY BEING SENT: %v********", string(body[:]))
+					c.JSON(response.StatusCode, gin.H{"message": gn.Message, "causal-metadata": gn.CausalMetadata, "value": gn.Value})
+					response.Body.Close()
+					break // if we managed to receive a response back after forwarding, don't forward to other nodes in that same shard
+				}
+			}
+			Mu.Mutex.Unlock()
 		}
 	})
-
 }

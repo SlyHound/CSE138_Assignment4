@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,8 +23,9 @@ type getData struct {
 }
 
 type View struct {
-	PersonalView []string
-	NewReplica   string // pertains only to PUT requests
+	PersonalView []string // contains all nodes that are currently up
+	NewReplica   string   // pertains only to PUT requests
+	SocketAddr   string   // the current node's socket address
 }
 
 /* this function will broadcast a GET request from one replica to all other
@@ -40,35 +42,39 @@ func RequestGet(v *View, personalSocketAddr string) ([]string, map[int]string) {
 		if addr == personalSocketAddr { // skip over the personal replica since we don't send to ourselves
 			continue
 		}
-		// fmt.Println("allSocketAddrs[index], index:", v.PersonalView[index], index)
+		fmt.Println("allSocketAddrs[index], index:", v.PersonalView[index], index)
 		request, err := http.NewRequest("GET", "http://"+v.PersonalView[index]+"/key-value-store-view", nil)
-
 		if err != nil {
 			log.Fatal("There was an error creating a GET request with the following error:", err.Error())
 		}
 
 		Mu.Mutex.Unlock()
-		httpForwarder := &http.Client{} // alias for DefaultClient
-		response, err := httpForwarder.Do(request)
+		// try to send a GET request 5 times //
+		var response *http.Response
+		for i := 0; i < 5; i++ {
+			httpForwarder := &http.Client{Timeout: 3 * time.Second} // alias for DefaultClient
+			response, err = httpForwarder.Do(request)
+			if err != nil {
+				time.Sleep(time.Second * 3)
+				fmt.Printf("ATTEMPTING TO SEND %v MORE TIMES & check err: %v", i, err.Error())
+			} else {
+				break
+			}
+		}
 		Mu.Mutex.Lock()
-
+		fmt.Println("Check personalView length in viewGet.go: ", len(v.PersonalView))
 		if err != nil { // if a response doesn't come back, then that replica might be down
 			fmt.Println("There was an error sending a GET request to " + v.PersonalView[index])
 			noResponseIndices[index] = v.PersonalView[index]
 			continue
 		}
-		// fmt.Println("Check response.Body in RequestGet:", response.Body)
-		defer response.Body.Close()
 		body, _ := ioutil.ReadAll(response.Body)
 		strBody := string(body[:])
-		// fmt.Println("Check strBody in RequestGet:", strBody)
 		json.NewDecoder(strings.NewReader(strBody)).Decode(&g)
-		// fmt.Println("Check v.View, V.Message in RequestGet:", v.View, v.Message)
-		// fmt.Println("Checking allSocketAddrs at end of rqstGet:", v)
+		response.Body.Close()
 	}
 	Mu.Mutex.Unlock()
-	// fmt.Println("Check the v.View is about to be returned:", g.View)
-	// fmt.Println("Check allSocketAddrs before returning v.View:", v)
+
 	return g.View, noResponseIndices
 }
 
@@ -104,7 +110,9 @@ func KvGet(replica string) map[string]StoreVal {
 func ResponseGet(r *gin.Engine, view *View) {
 	r.GET("/key-value-store-view", func(c *gin.Context) {
 		fmt.Println("GET rqst. received")
+		// Mu.Mutex.Lock()
 		c.JSON(http.StatusOK, gin.H{"message": "View retrieved successfully", "view": view.PersonalView})
+		// Mu.Mutex.Unlock()
 	})
 }
 
