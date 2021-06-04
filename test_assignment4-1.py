@@ -172,6 +172,12 @@ class TestHW4(unittest.TestCase):
         self.assertTrue(compareLists(shardIdsFromNode6, shardIdsFromNode1))
 
         self.shardIdList += shardIdsFromNode1
+        time.sleep(15)
+        for port in nodeHostPortList:
+            response = requests.get('http://localhost:' + port + '/key-value-store-view')
+            responseInJson = response.json()
+            print(f"Check view with port {port}:", responseInJson['view'])
+            self.assertTrue(compareViews(responseInJson['view'], view))
 
 
     def test_b_shard_id_members(self):
@@ -340,7 +346,6 @@ class TestHW4(unittest.TestCase):
         newView =  view + "," + node7SocketAddress
 
         runInstance(node7HostPort, node7Ip, subnetName, "node7", view=newView, giveShardCount=False)
-        # os.system("docker ps")
         # change back to 5
         time.sleep(5) # give time for instance to bind ports, update views, etc..
 

@@ -54,7 +54,7 @@ func ShardGetStore(s *SharedShardInfo, view *View, store map[string]StoreVal, lo
 						// otherwise, check other replicas in the shard
 						continue
 					}
-				} else{ 
+				} else { 
 					data := &StoreVal{Value: d.Value, CausalMetadata: d.CausalMetadata}
 					jsonData, _ := json.Marshal(data)
 					fwdRequest, err := http.NewRequest("GET", "http://"+s.ShardMembers[shardId][index]+"/key-value-store/"+key, bytes.NewBuffer(jsonData))

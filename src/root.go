@@ -19,7 +19,6 @@ const (
 // checks to ensure that replica's are up by broadcasting GET requests //
 func healthCheck(view *utility.View, personalSocketAddr string, kvStore map[string]utility.StoreVal, s *utility.SharedShardInfo) {
 
-	time.Sleep(3 * time.Second) // sleep to attempt to synchronize startup of all nodes
 	// runs infinitely on a 1 second clock interval //
 	interval := time.Tick(time.Second * 1)
 	for range interval {
@@ -64,7 +63,9 @@ func healthCheck(view *utility.View, personalSocketAddr string, kvStore map[stri
 					if addr == personalSocketAddr {
 						continue
 					}
+					utility.Mu.Mutex.Unlock()
 					dictValues := utility.KvGet(addr)
+					utility.Mu.Mutex.Lock()
 					fmt.Println("*********DICTVALUES ***********", dictValues)
 					// updates the current replica's key-value store with that of the received key-value store
 					for key, storeVal := range dictValues {
@@ -124,7 +125,6 @@ func setupRouter(kvStore map[string]utility.StoreVal, view []string, v *utility.
 	utility.ShardPutStore(shard, v, kvStore, socketIdx, currVC)
 	utility.ShardGetStore(shard, v, kvStore, socketIdx, currVC)
 	utility.ShardDeleteStore(shard, v, kvStore, socketIdx, currVC)
-	//utility.DeleteRequest(router, kvStore, socketIdx, v.PersonalView, currVC, shard)
 	utility.ReplicatePut(router, kvStore, socketIdx, v.PersonalView, currVC, shard)
 	utility.ReplicateDelete(router, kvStore, socketIdx, v.PersonalView, currVC, shard)
 	return router
