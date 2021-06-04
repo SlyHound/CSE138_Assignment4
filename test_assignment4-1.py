@@ -501,15 +501,12 @@ class TestHW4(unittest.TestCase):
             nodeIndex = (counter + 1 ) % len(nodeIpList)
 
             # get the value of the key
-            print(nodeIndex)
             response = requests.get('http://localhost:' + nodeHostPortList[nodeIndex] + '/key-value-store/key' + str(counter), json={"causal-metadata": self.causalMetadata}, timeout=TIMEOUT)
             responseInJson = response.json()
-            print(responseInJson)
             self.assertEqual(response.status_code, 200)
             value = responseInJson["value"]
             self.assertEqual(value, "value" + str(counter))
             self.causalMetadata = responseInJson["causal-metadata"]
-            print("haven't errored yet")
 
             print('.', end='', flush=True)
         print()

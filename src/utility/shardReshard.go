@@ -69,10 +69,10 @@ func ChunkRoute(store map[string]StoreVal, s *SharedShardInfo) {
 		json.Unmarshal(body, &b)
 		//replace whole chunk
 		Mu.Mutex.Lock()
-		for k := range store{
+		for k := range store {
 			delete(store, k)
 		}
-		for k, v := range b.ChunkInfo{
+		for k, v := range b.ChunkInfo {
 			store[k] = v
 		}
 		s.LocalKVStore = b.ChunkInfo
@@ -93,7 +93,11 @@ func UpdateShardMembersRoute(view *View, s *SharedShardInfo) {
 		}
 		json.Unmarshal(body, &d)
 		Mu.Mutex.Lock()
-		s.ShardMembers = d.NewShards
+		s.ShardCount = len(d.NewShards)
+		s.ShardMembers = make([][]string, len(d.NewShards))
+		for index, members := range d.NewShards {
+			s.ShardMembers[index] = append(s.ShardMembers[index], members...)
+		}
 		//update shard ID as well
 		for idx, row := range s.ShardMembers {
 			for _, col := range row {
@@ -163,9 +167,7 @@ func reshard(view *View, shards *SharedShardInfo, c *gin.Context) {
 
 	//going from SC=2 -> SC=3
 	for currentShard := 0; currentShard < len(shards.ShardMembers); currentShard++ {
-		//for each node, hash IP and then mod amount of shards given by our /reshard call
-		//GET the current shard KVStore for each shard, determine what needs to be rehashed and put in a chunk,
-		//Otherwise keep the store as such
+		//GET the current shard KVStore for each shard, rehash everything
 		shardKV := KvGet(shards.ShardMembers[currentShard][0])
 		oldShardID := currentShard
 		for key, value := range shardKV {

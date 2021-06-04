@@ -34,7 +34,9 @@ func ShardDeleteStore(s *SharedShardInfo, view *View, store map[string]StoreVal,
 		json.Unmarshal(data, &d)
 		defer c.Request.Body.Close()
 
+		Mu.Mutex.Lock()
 		shardId := HashModN(view.SocketAddr, s.ShardCount)
+		Mu.Mutex.Unlock()
 
 		if strBody == "{}" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Value is missing", "message": "Error in PUT"})
@@ -44,7 +46,9 @@ func ShardDeleteStore(s *SharedShardInfo, view *View, store map[string]StoreVal,
 			//If causal metadata is sent from client, we need to update the KVStore/check if we can deliver
 			//Assume we can't so just update each time
 			if len(d.CausalMetadata) > 0 {
+				Mu.Mutex.Lock()
 				updateKvStore(view.PersonalView, store, currVC, s)
+				Mu.Mutex.Unlock()
 			} else if len(d.CausalMetadata) == 0 {
 				Mu.Mutex.Lock()
 				d.CausalMetadata = make([]int, len(view.PersonalView))
